@@ -38,6 +38,7 @@ interface DeveloperTabProps {
   beltLevels: BeltLevelInfo[];
   onSaveBeltLevels: (belts: BeltLevelInfo[]) => Promise<void>;
   exercises: Exercise[];
+  language?: 'EN' | 'ID';
 }
 
 export default function DeveloperTab({ 
@@ -45,7 +46,8 @@ export default function DeveloperTab({
   onRefreshAllData,
   beltLevels,
   onSaveBeltLevels,
-  exercises
+  exercises,
+  language = 'ID'
 }: DeveloperTabProps) {
   const isConnected = isSupabaseActive();
   const supabase = getSupabaseClient();
@@ -91,6 +93,7 @@ export default function DeveloperTab({
   const [builderOrderCol, setBuilderOrderCol] = useState<string>('id');
   const [builderOrderDir, setBuilderOrderDir] = useState<string>('desc');
   const [builderLimit, setBuilderLimit] = useState<string>('all');
+  const [builderLanguage, setBuilderLanguage] = useState<'all' | 'EN' | 'ID' | 'active'>('active');
 
   // ==========================================
   // STATE FOR DIRECT SDK QUERY MODULE
@@ -108,7 +111,6 @@ export default function DeveloperTab({
   const [beltFormNameEN, setBeltFormNameEN] = useState<string>('');
   const [beltFormNameID, setBeltFormNameID] = useState<string>('');
   const [beltFormColor, setBeltFormColor] = useState<string>('bg-white/10 text-white border-white/20');
-  const [beltFormOrderIndex, setBeltFormOrderIndex] = useState<number>(1);
 
   // Sync Supabase Key changes to Headers context
   useEffect(() => {
@@ -127,10 +129,56 @@ export default function DeveloperTab({
     difficulty: string,
     orderCol: string,
     orderDir: string,
-    limit: string
+    limit: string,
+    langSelection: 'all' | 'EN' | 'ID' | 'active'
   ) => {
     const baseUrl = `${supabaseUrl}/rest/v1/${table}`;
     const params: string[] = [];
+
+    // Helper for specific language columns selection in REST request
+    const getSelectForLanguage = (tbl: string, langSel: 'all' | 'EN' | 'ID' | 'active', currLang: 'EN' | 'ID') => {
+      const resolvedLang = langSel === 'active' ? currLang : langSel;
+      if (resolvedLang === 'all') return '';
+
+      if (tbl === 'exercises') {
+        if (resolvedLang === 'EN') {
+          return 'select=id,titleEN,category,difficulty,duration,calories,descriptionEN,stepsEN,stepDetailsEN,mediaType,mediaUrl,mediaSlides,loops,vocalGuide,lungWaveD,targetMuscles,katedaSpecific,updatedAt';
+        } else {
+          return 'select=id,titleID,category,difficulty,duration,calories,descriptionID,stepsID,stepDetailsID,mediaType,mediaUrl,mediaSlides,loops,vocalGuide,lungWaveD,targetMuscles,katedaSpecific,updatedAt';
+        }
+      }
+
+      if (tbl === 'categories') {
+        if (resolvedLang === 'EN') {
+          return 'select=id,nameEN,descriptionEN,icon';
+        } else {
+          return 'select=id,nameID,descriptionID,icon';
+        }
+      }
+
+      if (tbl === 'activities') {
+        if (resolvedLang === 'EN') {
+          return 'select=id,userId,userName,userAvatar,exerciseId,exerciseTitleEN,timestamp,duration,caloriesBurned,status,heartRateAvg,notes';
+        } else {
+          return 'select=id,userId,userName,userAvatar,exerciseId,exerciseTitleID,timestamp,duration,caloriesBurned,status,heartRateAvg,notes';
+        }
+      }
+
+      if (tbl === 'belt_levels') {
+        if (resolvedLang === 'EN') {
+          return 'select=id,nameEN,color';
+        } else {
+          return 'select=id,nameID,color';
+        }
+      }
+
+      return '';
+    };
+
+    const selectQuery = getSelectForLanguage(table, langSelection, language);
+    if (selectQuery) {
+      params.push(selectQuery);
+    }
 
     if (table !== 'categories' && category !== 'all') {
       params.push(`category=eq.${category}`);
@@ -152,13 +200,14 @@ export default function DeveloperTab({
     setApiUrl(`${baseUrl}${finalQuery}`);
   };
 
-  const handleBuilderChange = (field: 'table' | 'category' | 'difficulty' | 'orderCol' | 'orderDir' | 'limit', val: string) => {
+  const handleBuilderChange = (field: 'table' | 'category' | 'difficulty' | 'orderCol' | 'orderDir' | 'limit' | 'language', val: string) => {
     let t = builderTable;
     let cat = builderCategory;
     let diff = builderDifficulty;
     let oCol = builderOrderCol;
     let oDir = builderOrderDir;
     let lim = builderLimit;
+    let langSel = builderLanguage;
 
     if (field === 'table') {
       t = val;
@@ -186,9 +235,12 @@ export default function DeveloperTab({
     } else if (field === 'limit') {
       lim = val;
       setBuilderLimit(val);
+    } else if (field === 'language') {
+      langSel = val as any;
+      setBuilderLanguage(val as any);
     }
 
-    updateUrlFromBuilder(t, cat, diff, oCol, oDir, lim);
+    updateUrlFromBuilder(t, cat, diff, oCol, oDir, lim, langSel);
   };
 
   // Handle Preset Choices helper
@@ -267,20 +319,15 @@ export default function DeveloperTab({
     setBeltFormNameEN('');
     setBeltFormNameID('');
     setBeltFormColor('bg-white/10 text-white border-white/20');
-    const nextOrder = beltLevels.length > 0 
-      ? Math.max(...beltLevels.map(b => b.order_index || 0)) + 1 
-      : 1;
-    setBeltFormOrderIndex(nextOrder);
     setShowBeltForm(true);
   };
 
   const handleOpenEditBelt = (belt: BeltLevelInfo) => {
     setEditingBelt(belt);
-    setBeltFormId(belt.id);
+    setBeltFormId(String(belt.id));
     setBeltFormNameEN(belt.nameEN);
     setBeltFormNameID(belt.nameID);
     setBeltFormColor(belt.color);
-    setBeltFormOrderIndex(belt.order_index);
     setShowBeltForm(true);
   };
 
@@ -291,25 +338,25 @@ export default function DeveloperTab({
       return;
     }
 
-    const cleanId = beltFormId.trim().toLowerCase();
+    const checkId = Number(beltFormId);
     let updatedBelts = [...beltLevels];
+    const finalId = isNaN(checkId) ? (updatedBelts.length > 0 ? Math.max(...updatedBelts.map(b => Number(b.id) || 0)) + 1 : 1) : checkId;
     
     const newBelt: BeltLevelInfo = {
-      id: cleanId,
+      id: finalId,
       nameEN: beltFormNameEN.trim(),
       nameID: beltFormNameID.trim(),
-      color: beltFormColor,
-      order_index: Number(beltFormOrderIndex) || 99
+      color: beltFormColor
     };
 
     if (editingBelt) {
-      const idx = updatedBelts.findIndex(b => b.id.toLowerCase() === editingBelt.id.toLowerCase());
+      const idx = updatedBelts.findIndex(b => Number(b.id) === Number(editingBelt.id));
       if (idx !== -1) {
         updatedBelts[idx] = newBelt;
       }
     } else {
-      if (updatedBelts.some(b => b.id.toLowerCase() === cleanId)) {
-        onAddLog(`A belt level with target code "${cleanId}" already exists in the active lookup registry.`, 'warn');
+      if (updatedBelts.some(b => Number(b.id) === finalId)) {
+        onAddLog(`A belt level with target code "${finalId}" already exists in the active lookup registry.`, 'warn');
         return;
       }
       updatedBelts.push(newBelt);
@@ -319,21 +366,21 @@ export default function DeveloperTab({
       onAddLog(`Syncing belt level change database query...`, 'info');
       await onSaveBeltLevels(updatedBelts);
       setShowBeltForm(false);
-      onAddLog(`Successfully saved belt level specifications for "${cleanId}"!`, 'success');
+      onAddLog(`Successfully saved belt level specifications for "${finalId}"!`, 'success');
     } catch (err: any) {
       onAddLog(`Failed to save belt level schema: ${err.message || err}`, 'warn');
     }
   };
 
-  const handleDeleteBelt = async (beltId: string) => {
-    const cleanId = beltId.toLowerCase();
-    const inUse = exercises.some(ex => ex.difficulty?.toLowerCase() === cleanId);
+  const handleDeleteBelt = async (beltId: any) => {
+    const numericId = Number(beltId);
+    const inUse = exercises.some(ex => Number(ex.difficulty) === numericId);
     if (inUse) {
       onAddLog(`Cannot delete belt level "${beltId}"! It is currently allocated to active training routines.`, 'warn');
       return;
     }
 
-    const updatedBelts = beltLevels.filter(b => b.id.toLowerCase() !== cleanId);
+    const updatedBelts = beltLevels.filter(b => Number(b.id) !== numericId);
     try {
       onAddLog(`Deleting belt level "${beltId}" from active catalog registry...`, 'info');
       await onSaveBeltLevels(updatedBelts);
@@ -777,7 +824,7 @@ export default function DeveloperTab({
                 </div>
 
                 {/* Limits Selection */}
-                <div className="md:col-span-2 lg:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-[#27272a]/40 pt-3">
+                <div className="md:col-span-2 lg:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-[#27272a]/40 pt-3">
                   <div>
                     <label className="block text-[10px] font-mono font-bold uppercase text-[#a1a1aa] mb-1">Limit Output Records</label>
                     <select
@@ -793,9 +840,24 @@ export default function DeveloperTab({
                     </select>
                   </div>
 
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold uppercase text-purple-400 mb-1">API Language / Column Filter</label>
+                    <select
+                      value={builderLanguage}
+                      onChange={(e) => handleBuilderChange('language', e.target.value)}
+                      className="w-full bg-[#18181b] border border-purple-500/30 rounded-lg px-2.5 py-2 text-[11px] font-mono text-white cursor-pointer focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="active">Active App Language (Filter by {language})</option>
+                      <option value="all">All Fields & Translations (no filter)</option>
+                      <option value="EN">English Fields Only (EN)</option>
+                      <option value="ID">Indonesian Fields Only (ID)</option>
+                    </select>
+                    <p className="text-[9px] text-[#a1a1aa] mt-1">Filters out non-matching language translation columns dynamically using PostgREST select query.</p>
+                  </div>
+
                   <div className="flex flex-col justify-end">
                     <span className="text-[10px] text-[#a1a1aa] font-mono leading-tight">
-                      💡 Changing any selector above automatically regenerates standard PostgREST queries and fills the customizable endpoint.
+                      💡 Changing any selector above automatically regenerates standard PostgREST queries and fills the customizable endpoint. Choose to request only the active language columns to keep payloads light!
                     </span>
                   </div>
                 </div>
@@ -1196,24 +1258,8 @@ export default function DeveloperTab({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                <div className="grid grid-cols-1 gap-4 pt-2">
                   <div>
-                    <label className="block text-[10px] uppercase font-mono font-bold text-[#a1a1aa] mb-1">
-                      Ordering Progression Index *
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min={1}
-                      max={99}
-                      value={beltFormOrderIndex}
-                      onChange={(e) => setBeltFormOrderIndex(Number(e.target.value))}
-                      className="w-full bg-[#18181b]/80 border border-[#27272a] rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-purple-500"
-                    />
-                    <p className="text-[9px] text-[#a1a1aa] mt-1">Controls rendering progression sort order.</p>
-                  </div>
-
-                  <div className="col-span-2">
                     <label className="block text-[10px] uppercase font-mono font-bold text-[#a1a1aa] mb-1">
                       Tailwind Style Badge Classes *
                     </label>
@@ -1288,7 +1334,7 @@ export default function DeveloperTab({
                 <table className="w-full text-left font-mono text-[11px] border-collapse">
                   <thead>
                     <tr className="bg-zinc-900 border-b border-[#27272a] text-[#a1a1aa] font-bold text-[10px] uppercase">
-                      <th className="px-4 py-3 text-center w-12">Seq</th>
+                      <th className="px-4 py-3 text-center w-12">Level</th>
                       <th className="px-4 py-3">Belt ID code</th>
                       <th className="px-4 py-3">English Translation</th>
                       <th className="px-4 py-3">Indonesian Translation</th>
@@ -1300,16 +1346,20 @@ export default function DeveloperTab({
                   <tbody className="divide-y divide-[#27272a]/50 text-white">
                     {beltLevels.map((belt) => {
                       const allocatedCount = exercises.filter(
-                        ex => ex.difficulty?.toLowerCase() === belt.id.toLowerCase()
+                        ex => {
+                          const exDiffStr = String(ex.difficulty || '').toLowerCase().trim();
+                          const beltIdStr = String(belt.id || '').toLowerCase().trim();
+                          return exDiffStr === beltIdStr;
+                        }
                       ).length;
 
                       return (
                         <tr key={belt.id} className="hover:bg-zinc-900/30 transition-colors">
-                          <td className="px-4 py-3 text-center font-bold text-[#a1a1aa]">
-                            {belt.order_index}
-                          </td>
-                          <td className="px-4 py-3 font-bold text-purple-400 select-all">
+                          <td className="px-4 py-3 text-center font-bold text-purple-400">
                             {belt.id}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-zinc-300">
+                            sabuk_lvl_{belt.id}
                           </td>
                           <td className="px-4 py-3 font-semibold text-stone-200">
                             {belt.nameEN}
@@ -1426,7 +1476,7 @@ export default function DeveloperTab({
               <div className="mt-3 space-y-2 text-[11px] font-mono font-semibold">
                 <div className="flex justify-between border-b border-[#27272a]/50 pb-1 text-[#a1a1aa]">
                   <span>id (Primary Key)</span>
-                  <span className="text-purple-400">text</span>
+                  <span className="text-purple-400">integer</span>
                 </div>
                 <div className="flex justify-between border-b border-[#27272a]/50 pb-1 text-[#a1a1aa]">
                   <span>nameEN</span>
@@ -1439,10 +1489,6 @@ export default function DeveloperTab({
                 <div className="flex justify-between border-b border-[#27272a]/50 pb-1 text-[#a1a1aa]">
                   <span>color</span>
                   <span className="text-purple-400">text</span>
-                </div>
-                <div className="flex justify-between border-b border-[#27272a]/50 pb-1 text-[#a1a1aa]">
-                  <span>order_index</span>
-                  <span className="text-purple-400">integer</span>
                 </div>
               </div>
             </div>

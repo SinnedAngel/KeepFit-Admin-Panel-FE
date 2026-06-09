@@ -42,24 +42,41 @@ import {
 
 export default function App() {
   // Localization State
-  const [language, setLanguage] = useState<'EN' | 'ID'>('EN');
+  const [language, setLanguage] = useState<'EN' | 'ID'>('ID');
   const t = translations[language];
 
   // Dynamic Belt levels from DB
   const [beltLevels, setBeltLevels] = useState<BeltLevelInfo[]>([]);
 
-  const getBeltInfo = (difficulty: string) => {
-    const level = difficulty?.toLowerCase();
-    const info = beltLevels.find(b => b.id.toLowerCase() === level);
-    if (info) return info;
-    const staticInfo = BELT_LEVELS.find(b => b.id.toLowerCase() === level);
-    if (staticInfo) return staticInfo;
-    // Fallbacks for beginner, intermediate, advanced
-    if (level === 'beginner') return { id: 'sabuk putih', nameEN: 'White Belt', nameID: 'Sabuk Putih', color: 'bg-white/10 text-white border border-white/20', order_index: 1 };
-    if (level === 'intermediate') return { id: 'sabuk kuning', nameEN: 'Yellow Belt', nameID: 'Sabuk Kuning', color: 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20', order_index: 2 };
-    if (level === 'advanced') return { id: 'sabuk coklat', nameEN: 'Brown Belt', nameID: 'Sabuk Coklat', color: 'bg-amber-800/10 text-amber-500 border border-amber-850/20 font-bold', order_index: 5 };
-    // Default general fallback
-    return { id: difficulty || 'sabuk putih', nameEN: difficulty || 'White Belt', nameID: difficulty || 'Sabuk Putih', color: 'bg-white/10 text-white border border-white/20 font-medium', order_index: 99 };
+  const getBeltInfo = (difficulty: any) => {
+    const diffNum = Number(difficulty);
+    if (!isNaN(diffNum) && difficulty !== null && difficulty !== undefined && String(difficulty).trim() !== '') {
+      const info = beltLevels.find(b => Number(b.id) === diffNum);
+      if (info) return info;
+      const staticInfo = BELT_LEVELS.find(b => Number(b.id) === diffNum);
+      if (staticInfo) return staticInfo;
+    }
+
+    // Try string comparison fallback
+    const levelStr = String(difficulty || '').toLowerCase().trim();
+    const infoByStr = beltLevels.find(b => String(b.id).toLowerCase() === levelStr);
+    if (infoByStr) return infoByStr;
+    const staticInfoByStr = BELT_LEVELS.find(b => String(b.id).toLowerCase() === levelStr);
+    if (staticInfoByStr) return staticInfoByStr;
+
+    // Direct translation comparison fallback
+    const infoByName = beltLevels.find(b => b.nameEN.toLowerCase() === levelStr || b.nameID.toLowerCase() === levelStr);
+    if (infoByName) return infoByName;
+    const staticInfoByName = BELT_LEVELS.find(b => b.nameEN.toLowerCase() === levelStr || b.nameID.toLowerCase() === levelStr);
+    if (staticInfoByName) return staticInfoByName;
+
+    // Fallbacks for beginner, intermediate, advanced or legacy string keys
+    if (levelStr === 'beginner' || levelStr === 'sabuk putih') return BELT_LEVELS[0];
+    if (levelStr === 'intermediate' || levelStr === 'sabuk kuning') return BELT_LEVELS[1];
+    if (levelStr === 'advanced' || levelStr === 'sabuk coklat') return BELT_LEVELS[4];
+
+    // Default to white belt (id: 1)
+    return BELT_LEVELS[0];
   };
 
   // Navigation State
@@ -72,6 +89,7 @@ export default function App() {
   };
 
   // Backend Synchronized States
+  const [rawExercises, setRawExercises] = useState<Exercise[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [activities, setActivities] = useState<ActivityType[]>([]);
@@ -82,6 +100,12 @@ export default function App() {
     totalActiveTime: 0,
     activeUsersCount: 0
   });
+
+  const getCategoryName = (id: string): string => {
+    const cat = categories.find(c => c.id === id);
+    if (!cat) return id;
+    return language === 'EN' ? cat.nameEN : cat.nameID;
+  };
 
   // UI States
   const [loading, setLoading] = useState(true);
@@ -94,7 +118,7 @@ export default function App() {
   const [formData, setFormData] = useState<Partial<Exercise>>({
     title: '',
     category: 'kateda',
-    difficulty: 'sabuk putih',
+    difficulty: 1,
     duration: 15,
     calories: 120,
     description: '',
@@ -158,7 +182,7 @@ export default function App() {
         getBeltLevels()
       ]);
 
-      setExercises(exList);
+      setRawExercises(exList);
       setCategories(catList);
       setActivities(actList);
       setStats(statTotals);
@@ -177,6 +201,25 @@ export default function App() {
     loadSystemData();
   }, []);
 
+  // Synchronize translated viewports of active exercises on language change
+  useEffect(() => {
+    const mapped = rawExercises.map(ex => ({
+      ...ex,
+      title: language === 'EN' ? (ex.titleEN || ex.title || '') : (ex.titleID || ex.title || ''),
+      description: language === 'EN' ? (ex.descriptionEN || ex.description || '') : (ex.descriptionID || ex.description || ''),
+      steps: language === 'EN' ? (ex.stepsEN || ex.steps || []) : (ex.stepsID || ex.steps || []),
+      stepDetails: language === 'EN' ? (ex.stepDetailsEN || ex.stepDetails || []) : (ex.stepDetailsID || ex.stepDetails || [])
+    }));
+    setExercises(mapped);
+
+    if (selectedExercise) {
+      const activeMatch = mapped.find(ex => ex.id === selectedExercise.id);
+      if (activeMatch) {
+        setSelectedExercise(activeMatch);
+      }
+    }
+  }, [language, rawExercises]);
+
   useEffect(() => {
     setCurrentSlideIdx(0);
   }, [selectedExercise]);
@@ -190,7 +233,7 @@ export default function App() {
     }
 
     try {
-      const currentList = [...exercises];
+      const currentList = [...rawExercises];
       const filteredSteps = formData.steps?.filter(s => s.trim() !== '') || [];
       
       let savedElement: Exercise;
@@ -201,10 +244,18 @@ export default function App() {
           addLog('Exercise not found.', 'warn');
           return;
         }
+        const prevEx = currentList[index];
         savedElement = {
-          ...currentList[index],
+          ...prevEx,
           ...formData,
-          steps: filteredSteps,
+          titleEN: language === 'EN' ? String(formData.title) : (prevEx.titleEN || prevEx.title || String(formData.title)),
+          titleID: language === 'ID' ? String(formData.title) : (prevEx.titleID || prevEx.title || String(formData.title)),
+          descriptionEN: language === 'EN' ? String(formData.description) : (prevEx.descriptionEN || prevEx.description || String(formData.description)),
+          descriptionID: language === 'ID' ? String(formData.description) : (prevEx.descriptionID || prevEx.description || String(formData.description)),
+          stepsEN: language === 'EN' ? filteredSteps : (prevEx.stepsEN || prevEx.steps || filteredSteps),
+          stepsID: language === 'ID' ? filteredSteps : (prevEx.stepsID || prevEx.steps || filteredSteps),
+          stepDetailsEN: language === 'EN' ? (formData.stepDetails || []) : (prevEx.stepDetailsEN || prevEx.stepDetails || formData.stepDetails || []),
+          stepDetailsID: language === 'ID' ? (formData.stepDetails || []) : (prevEx.stepDetailsID || prevEx.stepDetails || formData.stepDetails || []),
           updatedAt: new Date().toISOString()
         } as Exercise;
         currentList[index] = savedElement;
@@ -215,12 +266,20 @@ export default function App() {
         savedElement = {
           id: exId,
           title: String(formData.title),
+          titleEN: String(formData.title),
+          titleID: String(formData.title),
           category: String(formData.category),
-          difficulty: formData.difficulty || 'sabuk putih',
+          difficulty: formData.difficulty !== undefined ? formData.difficulty : 1,
           duration: Number(formData.duration) || 15,
           calories: Number(formData.calories) || 120,
           description: String(formData.description),
+          descriptionEN: String(formData.description),
+          descriptionID: String(formData.description),
           steps: filteredSteps,
+          stepsEN: filteredSteps,
+          stepsID: filteredSteps,
+          stepDetailsEN: formData.stepDetails || [],
+          stepDetailsID: formData.stepDetails || [],
           mediaType: formData.mediaType || 'image',
           mediaUrl: String(formData.mediaUrl || 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&q=80&w=800'),
           mediaSlides: formData.mediaSlides || [],
@@ -249,7 +308,7 @@ export default function App() {
     if (!window.confirm(`Are you sure you want to delete the exercise "${name}" from KeepFit API catalog? This will unsync this ID from mobile catalog.`)) return;
 
     try {
-      const filtered = exercises.filter(item => item.id !== id);
+      const filtered = rawExercises.filter(item => item.id !== id);
       await saveExercises(filtered);
       addLog(`Deleted "${name}" successfully`, 'success');
       if (selectedExercise?.id === id) setSelectedExercise(null);
@@ -264,7 +323,7 @@ export default function App() {
     setFormData({
       title: '',
       category: 'kateda',
-      difficulty: 'sabuk putih',
+      difficulty: 1,
       duration: 15,
       calories: 120,
       description: '',
@@ -611,7 +670,7 @@ export default function App() {
             id="nav-tab-dashboard"
           >
             <Layers className="w-5 h-5 opacity-80" />
-            <span>{t.sidebarDashboard}</span>
+            <span>{t.dashboard}</span>
           </button>
 
           <button 
@@ -620,7 +679,7 @@ export default function App() {
             id="nav-tab-exercises"
           >
             <Dumbbell className="w-5 h-5 opacity-80" />
-            <span>{t.sidebarExercises}</span>
+            <span>{t.exercises}</span>
           </button>
 
           <button 
@@ -629,7 +688,7 @@ export default function App() {
             id="nav-tab-activities"
           >
             <Activity className="w-5 h-5 opacity-80" />
-            <span>{t.sidebarUsers}</span>
+            <span>{t.activities}</span>
           </button>
 
           <button 
@@ -832,7 +891,7 @@ export default function App() {
                               <span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wider ${
                                 ex.category === 'kateda' ? 'bg-orange-950/40 text-orange-400 border border-orange-500/20' : 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/10'
                               }`}>
-                                {ex.category === 'kateda' ? 'Central Power' : ex.category}
+                                {getCategoryName(ex.category)}
                               </span>
                             </td>
                             <td className="py-3 px-4 text-[#a1a1aa] font-mono">{ex.steps.length} steps</td>
@@ -930,7 +989,7 @@ export default function App() {
                       onClick={() => setActiveCategoryFilter(cat.id)}
                       className={`px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 whitespace-nowrap ${activeCategoryFilter === cat.id ? 'bg-emerald-600 text-white' : 'bg-[#18181b] text-[#a1a1aa] hover:bg-zinc-800'}`}
                     >
-                      <span>{cat.name}</span>
+                      <span>{getCategoryName(cat.id)}</span>
                     </button>
                   ))}
                 </div>
@@ -1011,7 +1070,7 @@ export default function App() {
                               <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-widest ${
                                 ex.category === 'kateda' ? 'bg-orange-950/45 text-orange-400 border border-orange-500/20' : 'bg-emerald-950/45 text-emerald-400 border border-emerald-500/20'
                               }`}>
-                                {ex.category}
+                                {getCategoryName(ex.category)}
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -1077,7 +1136,7 @@ export default function App() {
                             <span className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold tracking-widest shrink-0 ${
                               ex.category === 'kateda' ? 'bg-orange-950/45 text-orange-400 border border-orange-500/20' : 'bg-emerald-950/45 text-emerald-400 border border-emerald-500/20'
                             }`}>
-                              {ex.category}
+                              {getCategoryName(ex.category)}
                             </span>
                           </div>
                           
@@ -1593,7 +1652,7 @@ export default function App() {
                       >
                         {exercises.map((ex, i) => (
                           <option key={ex.id} value={i} className="bg-[#18181b]">
-                            {ex.title} ({ex.category})
+                            {ex.title} ({getCategoryName(ex.category)})
                           </option>
                         ))}
                       </select>
@@ -1742,6 +1801,7 @@ export default function App() {
                 await loadSystemData();
               }}
               exercises={exercises}
+              language={language}
             />
           )}
 

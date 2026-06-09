@@ -8,26 +8,34 @@ const LOCAL_STORAGE_KEY = 'keepfit_db';
 const categoryTemplates: Category[] = [
   {
     id: 'kateda',
-    name: 'Kateda Central Power',
-    description: 'Traditional internal self-defense power, breathing, and posture training.',
+    nameEN: 'Kateda Central Power',
+    nameID: 'Kekuatan Pusat Kateda',
+    descriptionEN: 'Traditional internal self-defense power, breathing, and posture training.',
+    descriptionID: 'Latihan kekuatan internal, pernapasan, dan sikap pertahanan diri tradisional.',
     icon: 'Zap'
   },
   {
     id: 'strength',
-    name: 'Strength Training',
-    description: 'Building muscle, endurance, and structural power.',
+    nameEN: 'Strength Training',
+    nameID: 'Latihan Kekuatan',
+    descriptionEN: 'Building muscle, endurance, and structural power.',
+    descriptionID: 'Membangun otot, ketahanan, dan kekuatan struktural.',
     icon: 'Dumbbell'
   },
   {
     id: 'cardio',
-    name: 'Cardiovascular Conditioning',
-    description: 'High-energy stamina and breathing lung efficiency.',
+    nameEN: 'Cardiovascular Conditioning',
+    nameID: 'Kondisi Kardiovaskular',
+    descriptionEN: 'High-energy stamina and breathing lung efficiency.',
+    descriptionID: 'Stamina tinggi energi dan efisiensi paru-paru pernapasan.',
     icon: 'HeartPulse'
   },
   {
     id: 'mobility',
-    name: 'Mobility & Flexibility',
-    description: 'Stretching, joint lubrication, and flow.',
+    nameEN: 'Mobility & Flexibility',
+    nameID: 'Mobilitas & Fleksibilitas',
+    descriptionEN: 'Stretching, joint lubrication, and flow.',
+    descriptionID: 'Peregangan, lubrikasi sendi, dan aliran.',
     icon: 'Activity'
   }
 ];
@@ -207,9 +215,9 @@ export async function getBeltLevels(): Promise<BeltLevelInfo[]> {
   if (supabase) {
     try {
       const { data, error } = await supabase
-        .from('belt_levels')
-        .select('*')
-        .order('order_index', { ascending: true });
+          .from('belt_levels')
+          .select('*')
+          .order('id', { ascending: true });
 
       if (!error && data && data.length > 0) {
         return data as BeltLevelInfo[];
@@ -220,7 +228,7 @@ export async function getBeltLevels(): Promise<BeltLevelInfo[]> {
   }
   const db = readLocalStorageDb();
   const list = db.beltLevels || BELT_LEVELS;
-  return [...list].sort((a, b) => a.order_index - b.order_index);
+  return [...list].sort((a, b) => Number(a.id) - Number(b.id));
 }
 
 export async function saveBeltLevels(belts: BeltLevelInfo[]): Promise<void> {
@@ -240,11 +248,10 @@ export async function saveBeltLevels(belts: BeltLevelInfo[]): Promise<void> {
 
       if (belts.length > 0) {
         const cleanedBelts = belts.map(b => ({
-          id: b.id,
+          id: Number(b.id),
           nameEN: b.nameEN,
           nameID: b.nameID,
-          color: b.color || 'bg-white/10 text-white border-white/20',
-          order_index: Number(b.order_index) || 99
+          color: b.color || 'bg-white/10 text-white border-white/20'
         }));
         await supabase.from('belt_levels').upsert(cleanedBelts);
       }
@@ -273,7 +280,16 @@ export async function getExercises(): Promise<Exercise[]> {
     if (error) {
       throw new Error(`Supabase exercises fetch failed: ${error.message} (Target Table: 'exercises')`);
     }
-    return (data || []) as Exercise[];
+
+    const rows = data || [];
+    return rows.map((row: any) => ({
+      ...row,
+      // Fallbacks to maintain backward compatibility with existing single-language selectors
+      title: row.titleEN || row.titleID || '',
+      description: row.descriptionEN || row.descriptionID || '',
+      steps: row.stepsEN || row.stepsID || [],
+      stepDetails: row.stepDetailsEN || row.stepDetailsID || []
+    })) as Exercise[];
   }
   return readLocalStorageDb().exercises;
 }
@@ -300,26 +316,41 @@ export async function saveExercises(exercises: Exercise[]): Promise<void> {
     }
 
     if (exercises.length > 0) {
-      const cleanedExercises = exercises.map(ex => ({
-        id: ex.id,
-        title: ex.title,
-        category: ex.category,
-        difficulty: ex.difficulty,
-        duration: ex.duration,
-        calories: ex.calories,
-        description: ex.description,
-        steps: ex.steps,
-        stepDetails: ex.stepDetails || generateFallbackStepDetails(ex),
-        mediaType: ex.mediaType,
-        mediaUrl: ex.mediaUrl,
-        mediaSlides: ex.mediaSlides || [],
-        loops: ex.loops,
-        vocalGuide: ex.vocalGuide !== undefined ? ex.vocalGuide : true,
-        lungWaveD: ex.lungWaveD !== undefined ? ex.lungWaveD : true,
-        targetMuscles: ex.targetMuscles || [],
-        katedaSpecific: ex.katedaSpecific || false,
-        updatedAt: ex.updatedAt || new Date().toISOString()
-      }));
+      const cleanedExercises = exercises.map(ex => {
+        const titleEN = ex.titleEN || ex.title || '';
+        const titleID = ex.titleID || ex.title || '';
+        const descEN = ex.descriptionEN || ex.description || '';
+        const descID = ex.descriptionID || ex.description || '';
+        const stepsEN = ex.stepsEN || ex.steps || [];
+        const stepsID = ex.stepsID || ex.steps || [];
+        const detailsEN = ex.stepDetailsEN || ex.stepDetails || generateFallbackStepDetails(ex);
+        const detailsID = ex.stepDetailsID || ex.stepDetails || generateFallbackStepDetails(ex);
+
+        return {
+          id: ex.id,
+          titleEN: titleEN,
+          titleID: titleID,
+          category: ex.category,
+          difficulty: ex.difficulty,
+          duration: Number(ex.duration) || 0,
+          calories: Number(ex.calories) || 0,
+          descriptionEN: descEN,
+          descriptionID: descID,
+          stepsEN: stepsEN,
+          stepsID: stepsID,
+          stepDetailsEN: detailsEN,
+          stepDetailsID: detailsID,
+          mediaType: ex.mediaType || 'image',
+          mediaUrl: ex.mediaUrl || '',
+          mediaSlides: ex.mediaSlides || [],
+          loops: Number(ex.loops) || 1,
+          vocalGuide: ex.vocalGuide !== undefined ? ex.vocalGuide : true,
+          lungWaveD: ex.lungWaveD !== undefined ? ex.lungWaveD : true,
+          targetMuscles: ex.targetMuscles || [],
+          katedaSpecific: ex.katedaSpecific || false,
+          updatedAt: ex.updatedAt || new Date().toISOString()
+        };
+      });
 
       const { error: upsertErr } = await supabase.from('exercises').upsert(cleanedExercises);
       if (upsertErr) {
@@ -328,9 +359,19 @@ export async function saveExercises(exercises: Exercise[]): Promise<void> {
     }
   }
 
-  // Also maintain local fallback storage for persistence matching client capability
+  // Preserve in localStorage fallback
   const db = readLocalStorageDb();
-  db.exercises = exercises;
+  db.exercises = exercises.map(ex => ({
+    ...ex,
+    titleEN: ex.titleEN || ex.title || '',
+    titleID: ex.titleID || ex.title || '',
+    descriptionEN: ex.descriptionEN || ex.description || '',
+    descriptionID: ex.descriptionID || ex.description || '',
+    stepsEN: ex.stepsEN || ex.steps || [],
+    stepsID: ex.stepsID || ex.steps || [],
+    stepDetailsEN: ex.stepDetailsEN || ex.stepDetails,
+    stepDetailsID: ex.stepDetailsID || ex.stepDetails
+  }));
   writeLocalStorageDb(db);
 }
 
@@ -346,7 +387,24 @@ export async function getActivities(): Promise<Activity[]> {
     if (error) {
       throw new Error(`Supabase activities fetch failed: ${error.message} (Target Table: 'activities')`);
     }
-    return (data || []) as Activity[];
+
+    const rows = data || [];
+    return rows.map((row: any) => ({
+      id: row.id,
+      userId: row.userId,
+      userName: row.userName,
+      userAvatar: row.userAvatar,
+      exerciseId: row.exerciseId,
+      exerciseTitle: row.exerciseTitleEN || row.exerciseTitleID || '',
+      exerciseTitleEN: row.exerciseTitleEN || '',
+      exerciseTitleID: row.exerciseTitleID || '',
+      timestamp: row.timestamp,
+      duration: row.duration,
+      caloriesBurned: row.caloriesBurned,
+      status: row.status,
+      heartRateAvg: row.heartRateAvg,
+      notes: row.notes
+    })) as Activity[];
   }
   return readLocalStorageDb().activities;
 }
@@ -354,7 +412,23 @@ export async function getActivities(): Promise<Activity[]> {
 export async function addActivity(activity: Activity): Promise<void> {
   const supabase = getSupabaseClient();
   if (supabase) {
-    const { error } = await supabase.from('activities').insert([activity]);
+    const mappedToDb = {
+      id: activity.id,
+      userId: activity.userId,
+      userName: activity.userName,
+      userAvatar: activity.userAvatar,
+      exerciseId: activity.exerciseId,
+      exerciseTitleEN: activity.exerciseTitleEN || activity.exerciseTitle || '',
+      exerciseTitleID: activity.exerciseTitleID || activity.exerciseTitle || '',
+      timestamp: activity.timestamp,
+      duration: Number(activity.duration) || 0,
+      caloriesBurned: Number(activity.caloriesBurned) || 0,
+      status: activity.status,
+      heartRateAvg: activity.heartRateAvg !== undefined ? Number(activity.heartRateAvg) : null,
+      notes: activity.notes || ''
+    };
+
+    const { error } = await supabase.from('activities').insert([mappedToDb]);
     if (error) {
       throw new Error(`Supabase insert activity failed: ${error.message} (Target Table: 'activities')`);
     }
@@ -374,7 +448,7 @@ export async function getCategories(): Promise<Category[]> {
     const { data, error } = await supabase
       .from('categories')
       .select('*')
-      .order('name', { ascending: true });
+      .order('id', { ascending: true });
 
     if (error) {
       throw new Error(`Supabase categories fetch failed: ${error.message} (Target Table: 'categories')`);
