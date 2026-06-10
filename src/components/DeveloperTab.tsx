@@ -1487,6 +1487,14 @@ export default function DeveloperTab({
                   <span>katedaSpecific</span>
                   <span className="text-purple-400">boolean</span>
                 </div>
+                <div className="flex justify-between border-b border-[#27272a]/50 pb-1 text-[#a1a1aa]">
+                  <span>targetUnit</span>
+                  <span className="text-purple-400">text</span>
+                </div>
+                <div className="flex justify-between border-b border-[#27272a]/50 pb-1 text-[#a1a1aa]">
+                  <span>targetValue</span>
+                  <span className="text-purple-400">integer</span>
+                </div>
               </div>
             </div>
             <p className="text-[10px] text-[#a1a1aa] italic mt-4 border-t border-[#27272a] pt-2">Holds active martial arts movements, stage requirements, and lung conditioning routines.</p>
@@ -1552,6 +1560,14 @@ export default function DeveloperTab({
                 <div className="flex justify-between border-b border-[#27272a]/50 pb-1 text-[#a1a1aa]">
                   <span>caloriesBurned</span>
                   <span className="text-cyan-400">integer</span>
+                </div>
+                <div className="flex justify-between border-b border-[#27272a]/50 pb-1 text-[#a1a1aa]">
+                  <span>achievedUnit</span>
+                  <span className="text-cyan-400">text</span>
+                </div>
+                <div className="flex justify-between border-b border-[#27272a]/50 pb-1 text-[#a1a1aa]">
+                  <span>achievedValue</span>
+                  <span className="text-cyan-400">real</span>
                 </div>
               </div>
             </div>
@@ -1635,6 +1651,11 @@ DROP POLICY IF EXISTS "Enable insert for all users" ON activities;
 DROP POLICY IF EXISTS "Enable update for all users" ON activities;
 DROP POLICY IF EXISTS "Enable delete for all users" ON activities;
 
+DROP POLICY IF EXISTS "Enable read access for all users" ON exercises;
+DROP POLICY IF EXISTS "Enable insert for all users" ON exercises;
+DROP POLICY IF EXISTS "Enable update for all users" ON exercises;
+DROP POLICY IF EXISTS "Enable delete for all users" ON exercises;
+
 -- Create Kateda Keep-Fit Members Database Table
 CREATE TABLE IF NOT EXISTS members (
     id TEXT PRIMARY KEY,
@@ -1651,21 +1672,55 @@ CREATE TABLE IF NOT EXISTS members (
     avatar TEXT
 );
 
+-- Create Kateda Exercises Database Table
+CREATE TABLE IF NOT EXISTS exercises (
+    id TEXT PRIMARY KEY,
+    "titleEN" TEXT NOT NULL,
+    "titleID" TEXT NOT NULL,
+    category TEXT,
+    difficulty INTEGER,
+    duration INTEGER NOT NULL DEFAULT 0,
+    calories INTEGER NOT NULL DEFAULT 0,
+    "descriptionEN" TEXT,
+    "descriptionID" TEXT,
+    "stepsEN" JSONB DEFAULT '[]'::jsonb,
+    "stepsID" JSONB DEFAULT '[]'::jsonb,
+    "stepDetailsEN" JSONB DEFAULT '[]'::jsonb,
+    "stepDetailsID" JSONB DEFAULT '[]'::jsonb,
+    "mediaType" TEXT,
+    "mediaUrl" TEXT,
+    "mediaSlides" JSONB DEFAULT '[]'::jsonb,
+    loops INTEGER DEFAULT 1,
+    "vocalGuide" BOOLEAN DEFAULT true,
+    "lungWaveD" BOOLEAN DEFAULT true,
+    "targetMuscles" JSONB DEFAULT '[]'::jsonb,
+    "katedaSpecific" BOOLEAN DEFAULT false,
+    "targetUnit" TEXT DEFAULT 'minutes',
+    "targetValue" INTEGER DEFAULT 15,
+    "updatedAt" TEXT
+);
+
 -- Create Kateda Activities Database Table (Normalized!)
 CREATE TABLE IF NOT EXISTS activities (
     id TEXT PRIMARY KEY,
     "userId" TEXT REFERENCES members(id) ON DELETE SET NULL,
-    "exerciseId" TEXT,
+    "userName" TEXT,
+    "userAvatar" TEXT,
+    "exerciseId" TEXT REFERENCES exercises(id) ON DELETE SET NULL,
+    "exerciseTitle" TEXT,
     timestamp TEXT NOT NULL,
     duration INTEGER,
     "caloriesBurned" INTEGER,
     status TEXT NOT NULL DEFAULT 'completed',
     "heartRateAvg" INTEGER,
-    notes TEXT
+    notes TEXT,
+    "achievedUnit" TEXT DEFAULT 'minutes',
+    "achievedValue" REAL
 );
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE exercises ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activities ENABLE ROW LEVEL SECURITY;
 
 -- Access Policies (Allows reads and writes for the application clients)
@@ -1673,6 +1728,11 @@ CREATE POLICY "Enable read access for all users" ON members FOR SELECT USING (tr
 CREATE POLICY "Enable insert for all users" ON members FOR INSERT WITH CHECK (true);
 CREATE POLICY "Enable update for all users" ON members FOR UPDATE USING (true);
 CREATE POLICY "Enable delete for all users" ON members FOR DELETE USING (true);
+
+CREATE POLICY "Enable read access for all users" ON exercises FOR SELECT USING (true);
+CREATE POLICY "Enable insert for all users" ON exercises FOR INSERT WITH CHECK (true);
+CREATE POLICY "Enable update for all users" ON exercises FOR UPDATE USING (true);
+CREATE POLICY "Enable delete for all users" ON exercises FOR DELETE USING (true);
 
 CREATE POLICY "Enable read access for all users" ON activities FOR SELECT USING (true);
 CREATE POLICY "Enable insert for all users" ON activities FOR INSERT WITH CHECK (true);
@@ -1699,6 +1759,11 @@ DROP POLICY IF EXISTS "Enable insert for all users" ON activities;
 DROP POLICY IF EXISTS "Enable update for all users" ON activities;
 DROP POLICY IF EXISTS "Enable delete for all users" ON activities;
 
+DROP POLICY IF EXISTS "Enable read access for all users" ON exercises;
+DROP POLICY IF EXISTS "Enable insert for all users" ON exercises;
+DROP POLICY IF EXISTS "Enable update for all users" ON exercises;
+DROP POLICY IF EXISTS "Enable delete for all users" ON exercises;
+
 -- Create Kateda Keep-Fit Members Database Table
 CREATE TABLE IF NOT EXISTS members (
     id TEXT PRIMARY KEY,
@@ -1715,21 +1780,55 @@ CREATE TABLE IF NOT EXISTS members (
     avatar TEXT
 );
 
+-- Create Kateda Exercises Database Table
+CREATE TABLE IF NOT EXISTS exercises (
+    id TEXT PRIMARY KEY,
+    "titleEN" TEXT NOT NULL,
+    "titleID" TEXT NOT NULL,
+    category TEXT,
+    difficulty INTEGER,
+    duration INTEGER NOT NULL DEFAULT 0,
+    calories INTEGER NOT NULL DEFAULT 0,
+    "descriptionEN" TEXT,
+    "descriptionID" TEXT,
+    "stepsEN" JSONB DEFAULT '[]'::jsonb,
+    "stepsID" JSONB DEFAULT '[]'::jsonb,
+    "stepDetailsEN" JSONB DEFAULT '[]'::jsonb,
+    "stepDetailsID" JSONB DEFAULT '[]'::jsonb,
+    "mediaType" TEXT,
+    "mediaUrl" TEXT,
+    "mediaSlides" JSONB DEFAULT '[]'::jsonb,
+    loops INTEGER DEFAULT 1,
+    "vocalGuide" BOOLEAN DEFAULT true,
+    "lungWaveD" BOOLEAN DEFAULT true,
+    "targetMuscles" JSONB DEFAULT '[]'::jsonb,
+    "katedaSpecific" BOOLEAN DEFAULT false,
+    "targetUnit" TEXT DEFAULT 'minutes',
+    "targetValue" INTEGER DEFAULT 15,
+    "updatedAt" TEXT
+);
+
 -- Create Kateda Activities Database Table (Normalized!)
 CREATE TABLE IF NOT EXISTS activities (
     id TEXT PRIMARY KEY,
     "userId" TEXT REFERENCES members(id) ON DELETE SET NULL,
-    "exerciseId" TEXT,
+    "userName" TEXT,
+    "userAvatar" TEXT,
+    "exerciseId" TEXT REFERENCES exercises(id) ON DELETE SET NULL,
+    "exerciseTitle" TEXT,
     timestamp TEXT NOT NULL,
     duration INTEGER,
     "caloriesBurned" INTEGER,
     status TEXT NOT NULL DEFAULT 'completed',
     "heartRateAvg" INTEGER,
-    notes TEXT
+    notes TEXT,
+    "achievedUnit" TEXT DEFAULT 'minutes',
+    "achievedValue" REAL
 );
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE exercises ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activities ENABLE ROW LEVEL SECURITY;
 
 -- Access Policies (Allows reads and writes for the application clients)
@@ -1737,6 +1836,11 @@ CREATE POLICY "Enable read access for all users" ON members FOR SELECT USING (tr
 CREATE POLICY "Enable insert for all users" ON members FOR INSERT WITH CHECK (true);
 CREATE POLICY "Enable update for all users" ON members FOR UPDATE USING (true);
 CREATE POLICY "Enable delete for all users" ON members FOR DELETE USING (true);
+
+CREATE POLICY "Enable read access for all users" ON exercises FOR SELECT USING (true);
+CREATE POLICY "Enable insert for all users" ON exercises FOR INSERT WITH CHECK (true);
+CREATE POLICY "Enable update for all users" ON exercises FOR UPDATE USING (true);
+CREATE POLICY "Enable delete for all users" ON exercises FOR DELETE USING (true);
 
 CREATE POLICY "Enable read access for all users" ON activities FOR SELECT USING (true);
 CREATE POLICY "Enable insert for all users" ON activities FOR INSERT WITH CHECK (true);

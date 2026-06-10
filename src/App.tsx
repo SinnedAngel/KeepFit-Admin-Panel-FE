@@ -6,6 +6,8 @@ import {
   Flame, 
   Clock, 
   Plus, 
+  PlusCircle,
+  CheckSquare,
   Search, 
   Trash2, 
   Edit3, 
@@ -185,6 +187,13 @@ export default function App() {
   const [practiceActive, setPracticeActive] = useState(false);
   const [currentSlideIdx, setCurrentSlideIdx] = useState(0);
 
+  // Trainer Administrative session log overridden state variables
+  const [useRegisteredMember, setUseRegisteredMember] = useState<boolean>(true);
+  const [selectedMemberId, setSelectedMemberId] = useState<string>('');
+  const [manualPractitionerName, setManualPractitionerName] = useState<string>('');
+  const [sessionDateTime, setSessionDateTime] = useState<string>(new Date().toISOString().slice(0, 16));
+  const [achievedUnitsQty, setAchievedUnitsQty] = useState<string>('');
+
   // Mobile Workout simulator inputs
   const [simFormData, setSimFormData] = useState({
     userId: 'user-' + Math.floor(100 + Math.random() * 900),
@@ -192,8 +201,8 @@ export default function App() {
     exerciseIndex: 0,
     duration: '20',
     calories: '180',
-    notes: 'Simulated from KeepFit Admin simulator widget.',
-    heartRateAvg: '135'
+    notes: 'Class performance notes: Great focus, central power breathing was locked in.',
+    heartRateAvg: '132'
   });
   const [simulating, setSimulating] = useState(false);
   const [simSuccess, setSimSuccess] = useState(false);
@@ -231,6 +240,9 @@ export default function App() {
       setStats(statTotals);
       setBeltLevels(beltList);
       setMembers(memberList);
+      if (memberList.length > 0) {
+        setSelectedMemberId(memberList[0].id);
+      }
 
       addLog(`Synchronized active databases. Loaded ${exList.length} exercises, ${beltList.length} belt levels, ${memberList.length} members, and ${actList.length} activities.`, 'success');
     } catch (e: any) {
@@ -295,6 +307,10 @@ export default function App() {
           if (url.endsWith('.mp4') || url.includes('.mp4?')) return 'video';
           return 'image';
         };
+        const finalUnit = formData.targetUnit || 'minutes';
+        const finalVal = formData.targetValue !== undefined ? Number(formData.targetValue) : 15;
+        const finalDuration = finalUnit === 'minutes' ? finalVal : 0;
+
         savedElement = {
           ...prevEx,
           ...formData,
@@ -307,6 +323,9 @@ export default function App() {
           stepDetailsEN: language === 'EN' ? (formData.stepDetails || []) : (prevEx.stepDetailsEN || prevEx.stepDetails || formData.stepDetails || []),
           stepDetailsID: language === 'ID' ? (formData.stepDetails || []) : (prevEx.stepDetailsID || prevEx.stepDetails || formData.stepDetails || []),
           mediaType: computedMediaType(formData.mediaUrl || ''),
+          targetUnit: finalUnit,
+          targetValue: finalVal,
+          duration: finalDuration,
           updatedAt: new Date().toISOString()
         } as Exercise;
         currentList[index] = savedElement;
@@ -320,6 +339,11 @@ export default function App() {
           if (url.endsWith('.mp4') || url.includes('.mp4?')) return 'video';
           return 'image';
         };
+
+        const finalUnit = formData.targetUnit || 'minutes';
+        const finalVal = formData.targetValue !== undefined ? Number(formData.targetValue) : 15;
+        const finalDuration = finalUnit === 'minutes' ? finalVal : 0;
+
         savedElement = {
           id: exId,
           title: String(formData.title),
@@ -327,7 +351,7 @@ export default function App() {
           titleID: String(formData.title),
           category: String(formData.category),
           difficulty: formData.difficulty !== undefined ? formData.difficulty : 1,
-          duration: Number(formData.duration) || 15,
+          duration: finalDuration,
           calories: Number(formData.calories) || 120,
           description: String(formData.description),
           descriptionEN: String(formData.description),
@@ -345,6 +369,8 @@ export default function App() {
           lungWaveD: true,
           targetMuscles: formData.targetMuscles || [],
           katedaSpecific: false,
+          targetUnit: finalUnit,
+          targetValue: finalVal,
           updatedAt: new Date().toISOString()
         };
         currentList.unshift(savedElement);
@@ -792,7 +818,7 @@ export default function App() {
     return () => clearInterval(timerId);
   }, [practiceActive, isPlaying, activeStepIdx, activeLoopCount, selectedExercise]);
 
-  // Launch mobile emulator trigger
+  // Launch mobile emulator trigger / Manual log override handler
   const handleSimulateWorkout = async (e: FormEvent) => {
     e.preventDefault();
     if (!exercises.length) {
@@ -804,31 +830,58 @@ export default function App() {
     if (!linkedEx) return;
 
     setSimulating(true);
-    addLog(`Initiating KeepFit mobile API handshake for user ${simFormData.userName}...`, 'api');
+
+    let finalUserId = 'idx-anonymous';
+    let finalUserName = 'Ad-hoc Practitioner';
+    let finalUserAvatar = '';
+
+    if (useRegisteredMember) {
+      const activeMember = members.find(m => m.id === selectedMemberId) || members[0];
+      if (activeMember) {
+        finalUserId = activeMember.id;
+        finalUserName = activeMember.fullName;
+        finalUserAvatar = activeMember.avatar || '';
+      } else {
+        // Fallback to custom fields
+        finalUserId = simFormData.userId;
+        finalUserName = simFormData.userName;
+      }
+    } else {
+      finalUserId = `ad-hoc-${Date.now()}`;
+      finalUserName = manualPractitionerName || 'Ad-hoc Practitioner';
+    }
+
+    addLog(`Registering administrative training log entry for ${finalUserName}...`, 'api');
 
     try {
+      const parsedAchievedQty = achievedUnitsQty !== '' 
+        ? Number(achievedUnitsQty) 
+        : (Number(linkedEx.targetValue) || Number(linkedEx.duration) || 15);
+      
       const newAct: ActivityType = {
         id: `act-${Date.now()}`,
-        userId: simFormData.userId,
-        userName: simFormData.userName,
-        userAvatar: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 900000)}?auto=format&fit=facearea&facepad=2&w=128&h=128&q=80`,
+        userId: finalUserId,
+        userName: finalUserName,
+        userAvatar: finalUserAvatar || `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 900000)}?auto=format&fit=facearea&facepad=2&w=128&h=128&q=80`,
         exerciseId: linkedEx.id,
         exerciseTitle: linkedEx.title,
-        timestamp: new Date().toISOString(),
+        timestamp: sessionDateTime ? new Date(sessionDateTime).toISOString() : new Date().toISOString(),
         duration: Number(simFormData.duration),
         caloriesBurned: Number(simFormData.calories),
         status: 'completed',
         notes: simFormData.notes,
-        heartRateAvg: Number(simFormData.heartRateAvg)
+        heartRateAvg: Number(simFormData.heartRateAvg),
+        achievedUnit: linkedEx.targetUnit || 'minutes',
+        achievedValue: parsedAchievedQty
       };
 
       await addActivity(newAct);
-      addLog(`Mobile API success. Added workout record for ${simFormData.userName} (${linkedEx.title})`, 'success');
+      addLog(`Administrative entry recorded: Added session log for ${finalUserName} (${linkedEx.title})`, 'success');
       setSimSuccess(true);
       setTimeout(() => setSimSuccess(false), 3000);
       loadSystemData();
     } catch (e) {
-      addLog(`Handshake failed on POST /api/activities`, 'warn');
+      addLog(`Failed to finalize training transaction entry`, 'warn');
     } finally {
       setSimulating(false);
     }
@@ -1300,7 +1353,12 @@ export default function App() {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-white font-semibold font-mono text-xs">{ex.calories} kcal</div>
-                              <div className="text-[10px] text-[#a1a1aa] font-mono font-medium">{ex.duration} mins sequence</div>
+                              <div className="text-[10px] text-[#a1a1aa] font-mono font-medium">
+                                {ex.targetUnit === 'minutes' 
+                                  ? `${ex.targetValue || ex.duration} mins sequence` 
+                                  : `${ex.targetValue} ${ex.targetUnit}`
+                                }
+                              </div>
                             </td>
                             <td className="px-6 py-4 text-right">
                               <div className="flex gap-1 opacity-70 hover:opacity-100 justify-end transition-all" onClick={(e) => e.stopPropagation()}>
@@ -1361,7 +1419,9 @@ export default function App() {
                           <p className="text-xs text-[#a1a1aa] line-clamp-2 font-medium">{ex.description}</p>
                           
                           <div className="flex items-center justify-between text-[11px] font-mono pt-1 text-[#a1a1aa]">
-                            <span className="font-semibold">{ex.steps.length} steps • {ex.duration}m • {ex.calories}cal</span>
+                            <span className="font-semibold">
+                              {ex.steps.length} steps • {ex.targetUnit === 'minutes' ? `${ex.targetValue || ex.duration}m` : `${ex.targetValue} ${ex.targetUnit}`} • {ex.calories}cal
+                            </span>
                             <div className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                               <button 
                                 onClick={() => {
@@ -1514,8 +1574,15 @@ export default function App() {
                           })()}
                         </div>
                         <div>
-                          <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wider font-bold">Duration</p>
-                          <p className="text-xs text-white font-mono font-bold mt-0.5">{selectedExercise.duration} mins</p>
+                          <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wider font-bold">
+                            {selectedExercise.targetUnit === 'minutes' ? 'Duration' : 'Goal'}
+                          </p>
+                          <p className="text-xs text-white font-mono font-bold mt-0.5">
+                            {selectedExercise.targetUnit === 'minutes' 
+                              ? `${selectedExercise.targetValue || selectedExercise.duration} mins` 
+                              : `${selectedExercise.targetValue} ${selectedExercise.targetUnit}`
+                            }
+                          </p>
                         </div>
                         <div>
                           <p className="text-[10px] text-[#a1a1aa] uppercase tracking-wider font-bold">Calories</p>
@@ -1535,261 +1602,110 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Advanced Interactive Practice Sequencer HUD */}
-                      <div className="bg-zinc-950 border border-emerald-500/10 rounded-2xl p-4 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 font-mono tracking-wider">
-                            <span className="relative flex h-2 w-2">
-                              {isPlaying && practiceActive && (
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      {/* Trainer Quick Admin Session Logger instead of mobile rehearsal player */}
+                      <div className="bg-[#09090b] border border-emerald-500/10 rounded-2xl p-4 space-y-3">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 font-mono tracking-wider">
+                          <CheckSquare className="w-4 h-4 text-emerald-400" />
+                          <span>⚡ TRAINER QUICK SESSION LOGGER</span>
+                        </div>
+                        <p className="text-[11px] text-[#a1a1aa] leading-relaxed">
+                          Record a training session completion for this exercise directly onto a practitioner's timeline.
+                        </p>
+                        
+                        <div className="space-y-2.5">
+                          {/* Member Dropdown */}
+                          <div>
+                            <span className="block text-[9px] uppercase font-mono tracking-wider text-[#a1a1aa] font-bold mb-1">Target Practitioner</span>
+                            <select 
+                              id="quick-member-select"
+                              value={selectedMemberId}
+                              onChange={(e) => setSelectedMemberId(e.target.value)}
+                              className="w-full bg-[#18181b] border border-[#27272a]/80 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                            >
+                              {members.map(m => (
+                                <option key={m.id} value={m.id}>
+                                  {m.fullName} (Sabuk {m.beltLevel})
+                                </option>
+                              ))}
+                              {members.length === 0 && (
+                                <option value="">No registered members in system</option>
                               )}
-                              <span className={`relative inline-flex rounded-full h-2 w-2 ${isPlaying && practiceActive ? 'bg-emerald-500' : 'bg-zinc-600'}`}></span>
-                            </span>
-                            PRACTICE REHEARSAL AGENT
-                          </span>
-                          
-                          {/* Audio Mute Switch */}
-                          <button 
-                            onClick={() => {
-                              const nextMuted = !isAudioMuted;
-                              setIsAudioMuted(nextMuted);
-                              if (!nextMuted) {
-                                if (window.speechSynthesis) {
-                                  window.speechSynthesis.cancel();
-                                  window.speechSynthesis.speak(new SpeechSynthesisUtterance("Audio coach active."));
-                                }
+                            </select>
+                          </div>
+
+                          {/* Achieved metric row */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="block text-[9px] uppercase font-mono tracking-wider text-[#a1a1aa] font-bold mb-1">
+                                Completed ({selectedExercise.targetUnit || 'minutes'})
+                              </span>
+                              <input 
+                                type="number"
+                                placeholder={`e.g. ${selectedExercise.targetValue || selectedExercise.duration || 10}`}
+                                value={achievedUnitsQty}
+                                onChange={(e) => setAchievedUnitsQty(e.target.value)}
+                                className="w-full bg-[#18181b] border border-[#27272a]/80 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+                              />
+                            </div>
+                            <div>
+                              <span className="block text-[9px] uppercase font-mono tracking-wider text-[#a1a1aa] font-bold mb-1">Avg Heart Rate</span>
+                              <input 
+                                type="number"
+                                placeholder="e.g. 132 BPM"
+                                value={simFormData.heartRateAvg}
+                                onChange={(e) => setSimFormData(prev => ({ ...prev, heartRateAvg: e.target.value }))}
+                                className="w-full bg-[#18181b] border border-[#27272a]/80 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Simple action submit */}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!members.length) {
+                                alert('Please register a class member first.');
+                                return;
+                              }
+                              const activeMember = members.find(m => m.id === selectedMemberId) || members[0];
+                              if (!activeMember) return;
+                              const currentValStr = achievedUnitsQty !== '' ? achievedUnitsQty : String(selectedExercise.targetValue || selectedExercise.duration || 10);
+                              
+                              const newQuickAct: ActivityType = {
+                                id: `act-${Date.now()}`,
+                                userId: activeMember.id,
+                                userName: activeMember.fullName,
+                                userAvatar: activeMember.avatar || `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 900000)}?auto=format&fit=facearea&facepad=2&w=128&h=128&q=80`,
+                                exerciseId: selectedExercise.id,
+                                exerciseTitle: selectedExercise.title,
+                                timestamp: new Date().toISOString(),
+                                duration: selectedExercise.duration,
+                                caloriesBurned: selectedExercise.calories,
+                                status: 'completed' as const,
+                                notes: `Logged from Quick Catalog Drawer. Smooth postural compliance.`,
+                                heartRateAvg: Number(simFormData.heartRateAvg) || 132,
+                                achievedUnit: selectedExercise.targetUnit || 'minutes',
+                                achievedValue: Number(currentValStr)
+                              };
+
+                              try {
+                                setSimulating(true);
+                                await addActivity(newQuickAct);
+                                addLog(`Quick training log recorded in catalog drawers for ${activeMember.fullName}`, 'success');
+                                alert(`Successfully logged custom ${selectedExercise.title} completion for ${activeMember.fullName}!`);
+                                loadSystemData();
+                              } catch(error) {
+                                addLog('Failure uploading quick record', 'warn');
+                              } finally {
+                                setSimulating(false);
                               }
                             }}
-                            className={`flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-1 rounded transition-colors ${
-                              isAudioMuted ? 'text-zinc-500 hover:text-zinc-300' : 'text-emerald-400 bg-emerald-950/20'
-                            }`}
-                            title={isAudioMuted ? "Enable Voice Over Coach" : "Disable Voice Over Coach"}
+                            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 rounded-xl text-xs transition-all flex items-center justify-center gap-1 cursor-pointer font-sans shadow-md"
                           >
-                            {isAudioMuted ? '🔇 MUTE COACH' : '🔊 COACH ACTIVE'}
+                            <PlusCircle className="w-3.5 h-3.5" />
+                            <span>Quick Log Custom Achievement</span>
                           </button>
                         </div>
-
-                        {practiceActive ? (
-                          // Sequencer Active Layout
-                          <div className="space-y-4">
-                            {/* Running Step detail card */}
-                            <div className="bg-zinc-900 border border-[#27272a] rounded-xl p-4 text-center space-y-2">
-                              {/* Step Index badge and Loop label */}
-                              <div className="flex items-center justify-between text-[10px] uppercase font-mono tracking-wider text-[#a1a1aa] font-bold">
-                                <span>Step {activeStepIdx + 1} of {(selectedExercise.stepDetails || []).length}</span>
-                                {['inhale', 'hold', 'exhale', 'rest'].includes(selectedExercise.stepDetails?.[activeStepIdx]?.type || '') && (
-                                  <span className="bg-purple-950/40 text-purple-400 px-2.5 py-0.5 rounded-full border border-purple-500/20 font-mono">
-                                    Loop {activeLoopCount} / {selectedExercise.stepDetails?.[activeStepIdx]?.loops || 10}
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Action text */}
-                              <h4 className="text-xs font-bold text-white transition-all leading-relaxed">
-                                {selectedExercise.stepDetails?.[activeStepIdx]?.text || selectedExercise.steps[activeStepIdx]}
-                              </h4>
-
-                              {/* Hint / Coach cue in speech bubble */}
-                              {selectedExercise.stepDetails?.[activeStepIdx]?.hint && (
-                                <p className="text-[10px] text-emerald-400 italic bg-emerald-950/15 border border-emerald-500/10 py-1.5 px-3 rounded-lg inline-block text-center mt-1 font-medium">
-                                  "{selectedExercise.stepDetails[activeStepIdx].hint}"
-                                </p>
-                              )}
-
-                              {/* Countdown or Target Counter display */}
-                              {(() => {
-                                const currentStep = selectedExercise.stepDetails?.[activeStepIdx];
-                                const isTimeBased = !currentStep || !currentStep.unit || currentStep.unit === 'seconds';
-                                
-                                return (
-                                  <div className="pt-2 flex flex-col items-center justify-center space-y-2.5">
-                                    <div className="relative w-23 h-23 flex items-center justify-center rounded-full border-4 border-zinc-800 bg-zinc-950/50 shadow-inner">
-                                      {/* Pulsing visual core layer */}
-                                      <div className={`absolute inset-1 rounded-full border border-emerald-500/10 transition-all ${
-                                        isPlaying && practiceActive ? 'animate-pulse scale-105 bg-emerald-500/[0.02]' : ''
-                                      }`} />
-                                      <div className="text-center">
-                                        <span className="block text-xl font-bold font-mono text-white leading-none">
-                                          {String(secondsLeft).padStart(2, '0')}
-                                        </span>
-                                        <span className="text-[7.5px] font-mono text-[#a1a1aa] tracking-widest font-black uppercase mt-1 block">
-                                          {isTimeBased ? 'SEC LEFT' : 'ELAPSED'}
-                                        </span>
-                                      </div>
-                                    </div>
-                                    
-                                    {/* Non-seconds target badge */}
-                                    {!isTimeBased && currentStep && (
-                                      <div className="animate-fadeIn font-mono text-[9px] font-bold text-white bg-emerald-950/80 border border-emerald-500/25 px-2.5 py-0.5 rounded-full uppercase tracking-widest flex items-center gap-1">
-                                        <span>GOAL:</span>
-                                        <span className="text-emerald-400 font-extrabold">{currentStep.quantity || 10}</span>
-                                        <span className="text-[#a1a1aa]">{currentStep.unit}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-
-                              {/* Step Type badge display */}
-                              <div className="flex justify-center pt-1">
-                                <span className={`px-2 py-0.5 rounded text-[8px] font-mono uppercase tracking-wider font-bold ${
-                                  selectedExercise.stepDetails?.[activeStepIdx]?.type === 'inhale' ? 'bg-blue-950/50 text-blue-400 border border-blue-500/25' :
-                                  selectedExercise.stepDetails?.[activeStepIdx]?.type === 'hold' ? 'bg-orange-950/50 text-orange-400 border border-orange-500/25' :
-                                  selectedExercise.stepDetails?.[activeStepIdx]?.type === 'exhale' ? 'bg-emerald-950/50 text-emerald-500 border border-emerald-500/25' :
-                                  selectedExercise.stepDetails?.[activeStepIdx]?.type === 'rest' ? 'bg-zinc-800/40 text-zinc-400 border border-[#27272a]' :
-                                  selectedExercise.stepDetails?.[activeStepIdx]?.type === 'static_hold' ? 'bg-purple-950/50 text-purple-400 border border-purple-500/25' :
-                                  'bg-zinc-900 text-[#a1a1aa] border border-zinc-800'
-                                }`}>
-                                  STATE: {selectedExercise.stepDetails?.[activeStepIdx]?.type || 'Instruction'}
-                                </span>
-                              </div>
-
-                              {/* Breathing Lung & Diaphragm Wave Visual Aid (lungWaveD) */}
-                              {selectedExercise.lungWaveD && ['inhale', 'hold', 'exhale'].includes(selectedExercise.stepDetails?.[activeStepIdx]?.type || '') && (
-                                <div className="p-3 bg-zinc-950/40 border border-[#27272a]/80 rounded-xl space-y-2 mt-2">
-                                  <div className="flex items-center justify-between text-[8px] font-mono text-[#a1a1aa] font-bold uppercase tracking-wider">
-                                    <span>LUNG STATUS</span>
-                                    <span className="text-emerald-400 animate-pulse">
-                                      {selectedExercise.stepDetails?.[activeStepIdx]?.type === 'inhale' ? 'Expanding Lungs' :
-                                       selectedExercise.stepDetails?.[activeStepIdx]?.type === 'hold' ? 'Lock Core Power' :
-                                       'Contracting Lungs'}
-                                    </span>
-                                  </div>
-                                  <div className="relative h-14 w-full flex items-center justify-center overflow-hidden">
-                                    {/* Waves animated nodes */}
-                                    <div className="absolute inset-0 flex items-center justify-around px-6 opacity-35 select-none pointer-events-none">
-                                      {[1, 2, 3, 4, 5].map((idx) => {
-                                        return (
-                                          <div 
-                                            key={idx} 
-                                            style={{
-                                              height: selectedExercise.stepDetails?.[activeStepIdx]?.type === 'inhale' ? '40px' : 
-                                                      selectedExercise.stepDetails?.[activeStepIdx]?.type === 'hold' ? '30px' : '12px',
-                                              transition: "all 0.8s ease-in-out"
-                                            }}
-                                            className={`w-1.5 rounded-full ${
-                                              selectedExercise.stepDetails?.[activeStepIdx]?.type === 'inhale' ? 'bg-blue-500' :
-                                              selectedExercise.stepDetails?.[activeStepIdx]?.type === 'hold' ? 'bg-amber-500' :
-                                              'bg-emerald-500'
-                                            }`} 
-                                          />
-                                        );
-                                      })}
-                                    </div>
-                                    {/* Pulse orb */}
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[8px] font-mono border font-bold transition-all duration-1000 ${
-                                      selectedExercise.stepDetails?.[activeStepIdx]?.type === 'inhale' ? 'scale-125 bg-blue-500/20 border-blue-500 text-blue-400' :
-                                      selectedExercise.stepDetails?.[activeStepIdx]?.type === 'hold' ? 'scale-110 bg-amber-500/25 border-amber-500 text-amber-300' :
-                                      'scale-75 bg-emerald-500/10 border-emerald-500 text-emerald-400'
-                                    }`}>
-                                      {selectedExercise.stepDetails?.[activeStepIdx]?.type === 'inhale' ? 'EXPAND' :
-                                       selectedExercise.stepDetails?.[activeStepIdx]?.type === 'hold' ? 'LOCK' :
-                                       'DROP'}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                                                    {/* Runner control buttons */}
-                            {(() => {
-                              const currentStep = selectedExercise.stepDetails?.[activeStepIdx];
-                              const isTimeBased = !currentStep || !currentStep.unit || currentStep.unit === 'seconds';
-
-                              if (isTimeBased) {
-                                return (
-                                  <div className="flex gap-2 text-[11px]">
-                                    <button 
-                                      onClick={() => {
-                                        if (activeStepIdx > 0) {
-                                          const prevIdx = activeStepIdx - 1;
-                                          setActiveStepIdx(prevIdx);
-                                          const details = selectedExercise.stepDetails || [];
-                                          const nextStep = details[prevIdx];
-                                          const isNextTimeBased = !nextStep || !nextStep.unit || nextStep.unit === 'seconds';
-                                          setSecondsLeft(isNextTimeBased ? (nextStep.duration || 15) : 0);
-                                          speakCurrentStep(nextStep, activeLoopCount);
-                                        }
-                                      }}
-                                      disabled={activeStepIdx === 0}
-                                      className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-[#a1a1aa] hover:text-white border border-[#27272a] rounded-xl py-1.5 font-bold transition-colors disabled:opacity-50"
-                                    >
-                                      Prev
-                                    </button>
-
-                                    <button 
-                                      onClick={() => setIsPlaying(!isPlaying)}
-                                      className={`flex-1 rounded-xl py-1.5 font-bold transition-colors ${
-                                        isPlaying ? 'bg-zinc-800 hover:bg-zinc-700 text-white border border-[#3f3f46]' : 'bg-emerald-500 hover:bg-emerald-400 text-black'
-                                      }`}
-                                    >
-                                      {isPlaying ? '⏸️ Pause' : '▶️ Resume'}
-                                    </button>
-
-                                    <button 
-                                      onClick={handleStepCompletion}
-                                      className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-[#a1a1aa] hover:text-white border border-[#27272a] rounded-xl py-1.5 font-bold transition-colors"
-                                    >
-                                      Skip
-                                    </button>
-                                  </div>
-                                );
-                              } else {
-                                return (
-                                  <div className="flex gap-2 text-[11px]">
-                                    <button 
-                                      onClick={() => {
-                                        if (activeStepIdx > 0) {
-                                          const prevIdx = activeStepIdx - 1;
-                                          setActiveStepIdx(prevIdx);
-                                          const details = selectedExercise.stepDetails || [];
-                                          const nextStep = details[prevIdx];
-                                          const isNextTimeBased = !nextStep || !nextStep.unit || nextStep.unit === 'seconds';
-                                          setSecondsLeft(isNextTimeBased ? (nextStep.duration || 15) : 0);
-                                          speakCurrentStep(nextStep, activeLoopCount);
-                                        }
-                                      }}
-                                      disabled={activeStepIdx === 0}
-                                      className="w-1/4 bg-zinc-900 hover:bg-zinc-800 text-[#a1a1aa] hover:text-white border border-[#27272a] rounded-xl py-1.5 font-bold transition-colors disabled:opacity-50"
-                                    >
-                                      Prev
-                                    </button>
-
-                                    <button 
-                                      onClick={handleStepCompletion}
-                                      className="w-3/4 bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase tracking-wider rounded-xl py-1.5 font-mono shadow-md shadow-emerald-500/10 flex items-center justify-center gap-1.5 transition-all text-xs cursor-pointer"
-                                    >
-                                      <span>✅ COMPLETE STEP</span>
-                                    </button>
-                                  </div>
-                                );
-                              }
-                            })()}              </div>
-
-                            <button 
-                              onClick={() => {
-                                setPracticeActive(false);
-                                setIsPlaying(false);
-                                if (window.speechSynthesis) window.speechSynthesis.cancel();
-                              }}
-                              className="w-full bg-red-950/20 hover:bg-red-950/30 text-red-400 border border-red-500/10 rounded-xl py-1.5 text-xs font-bold transition-colors"
-                            >
-                              Stop Practice Run
-                            </button>
-                          </div>
-                        ) : (
-                          // Idle Sequencer Launch Layout
-                          <div className="space-y-3 text-center py-1">
-                            <p className="text-[11px] text-[#a1a1aa] leading-relaxed font-semibold">
-                              Test posture countdowns & repeating loop constraints with voice overs before sync to mobile.
-                            </p>
-                            
-                            <button 
-                              onClick={() => startPractice(selectedExercise)}
-                              className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-xl py-2 text-xs transition-all cursor-pointer shadow-lg shadow-emerald-500/5 hover:shadow-emerald-500/10 flex items-center justify-center gap-1.5"
-                            >
-                              <span>▶️ Rehearse Timing Sequence</span>
-                            </button>
-                          </div>
-                        )}
                       </div>
 
                       {/* steps array checklist */}
@@ -1846,62 +1762,96 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 3: ACTIVITY WORKOUT MONITOR AND MOBILE API SIMULATOR */}
+          {/* TAB 3: ACTIVITY WORKOUT MONITOR AND ADMINISTRATIVE LOGGER */}
           {!loading && activeTab === 'activities' && (
             <div className="space-y-8 animate-fadeIn" id="view-activities">
               
               {/* Introduction bar */}
-              <div className="bg-emerald-900/10 border border-emerald-500/20 rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <h4 className="text-base font-bold text-[#fafafa] flex items-center gap-1.5 font-sans">
                     <User className="text-emerald-400 w-5 h-5 shrink-0" />
-                    <span>Real-time Mobile REST Synchronization Controller</span>
+                    <span>Administrative Workout Logging Console</span>
                   </h4>
-                  <p className="text-xs text-[#a1a1aa] font-medium leading-relaxed max-w-2xl">This panel acts as the developer console for monitoring real device connections. When KeepFit mobile app users complete workouts on iOS or Android, their telemetry pushes to this API. Simulatethe call below!</p>
+                  <p className="text-xs text-[#a1a1aa] font-medium leading-relaxed max-w-2xl">
+                    Log custom training sessions manually for central syllabus students or registered practitioners. This updates member timelines, recalculates energy performance ratios, and locks active stats in real-time.
+                  </p>
                 </div>
                 <div className="flex gap-2 shrink-0">
                   <div className="bg-[#18181b] border border-[#27272a] rounded-lg px-3 py-1.5 text-center">
-                    <div className="text-[10px] text-[#a1a1aa] font-bold uppercase tracking-wider font-mono">Mobile Node</div>
-                    <div className="text-xs font-bold text-emerald-400 font-mono mt-0.5">HTTPS POST ACTIVE</div>
+                    <div className="text-[10px] text-[#a1a1aa] font-bold uppercase tracking-wider font-mono">Trainer Mode</div>
+                    <div className="text-xs font-bold text-emerald-400 font-mono mt-0.5">MANUAL LOGS READY</div>
                   </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 
-                {/* Left side: Simulated Workout REST client POST tool */}
-                <div className="bg-[#18181b] border border-[#27272a] rounded-2xl p-6 self-start flex flex-col justify-between" id="mobile-simulation-widget">
+                {/* Left side: Trainer Workout Session Logger form widget */}
+                <div className="bg-[#18181b] border border-[#27272a] rounded-2xl p-6 self-start flex flex-col justify-between animate-fadeIn" id="mobile-simulation-widget">
                   <div className="space-y-1 mb-5">
                     <div className="flex items-center gap-1.5">
-                      <span className="px-1.5 py-0.5 bg-zinc-800 text-[#fafafa] border border-[#27272a] text-[9px] font-mono uppercase font-bold">POST Endpoint</span>
-                      <span className="text-[10px] font-mono text-emerald-400">/api/activities</span>
+                      <span className="px-1.5 py-0.5 bg-[#09090b] text-[#fafafa] border border-[#27272a] text-[9px] font-mono uppercase font-bold text-emerald-400">Class Recorder</span>
+                      <span className="text-[10px] font-mono text-zinc-400">offline-first</span>
                     </div>
-                    <h4 className="text-base font-bold text-white mt-1">Mobile REST Simulator client</h4>
-                    <p className="text-xs text-[#a1a1aa]">Trigger a workout log callback to verify active state integration.</p>
+                    <h4 className="text-base font-bold text-white mt-1">Manual Activity Logger</h4>
+                    <p className="text-xs text-[#a1a1aa]">Log physical milestones directly into database timelines.</p>
                   </div>
 
                   <form onSubmit={handleSimulateWorkout} className="space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-mono uppercase text-[#a1a1aa] font-bold mb-1">User Identifier</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input 
-                          type="text" 
-                          placeholder="User ID" 
-                          value={simFormData.userId}
-                          onChange={(e) => setSimFormData(prev => ({ ...prev, userId: e.target.value }))}
-                          required
-                          className="bg-[#09090b] border border-[#27272a] rounded-xl px-3 py-2 text-xs text-white uppercase focus:outline-none focus:border-emerald-500"
-                        />
-                        <input 
-                          type="text" 
-                          placeholder="User Name" 
-                          value={simFormData.userName}
-                          onChange={(e) => setSimFormData(prev => ({ ...prev, userName: e.target.value }))}
-                          required
-                          className="bg-[#09090b] border border-[#27272a] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                        />
+                    {/* Member Selection Toggle */}
+                    <div className="bg-[#09090b] border border-[#27272a] p-2.5 rounded-xl flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-mono uppercase text-[#a1a1aa] font-bold">Practitioner Type</span>
+                      <div className="flex bg-zinc-900 rounded-lg p-0.5 border border-zinc-800 shrink-0">
+                        <button 
+                          type="button"
+                          onClick={() => setUseRegisteredMember(true)}
+                          className={`px-2 py-1 rounded text-[10px] font-bold uppercase cursor-pointer transition-all ${useRegisteredMember ? 'bg-emerald-500 text-black' : 'text-[#a1a1aa] hover:text-white'}`}
+                        >
+                          DB Member
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setUseRegisteredMember(false)}
+                          className={`px-2 py-1 rounded text-[10px] font-bold uppercase cursor-pointer transition-all ${!useRegisteredMember ? 'bg-emerald-500 text-black' : 'text-[#a1a1aa] hover:text-white'}`}
+                        >
+                          Ad-Hoc Name
+                        </button>
                       </div>
                     </div>
+
+                    {useRegisteredMember ? (
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase text-[#a1a1aa] font-bold mb-1">Select Registered Member</label>
+                        <select 
+                          value={selectedMemberId}
+                          onChange={(e) => setSelectedMemberId(e.target.value)}
+                          required
+                          className="w-full bg-[#09090b] border border-[#27272a] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                        >
+                          {members.map(m => (
+                            <option key={m.id} value={m.id} className="bg-[#18181b]">
+                              {m.fullName} (Sabuk {m.beltLevel})
+                            </option>
+                          ))}
+                          {members.length === 0 && (
+                            <option value="">No members found in DB</option>
+                          )}
+                        </select>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase text-[#a1a1aa] font-bold mb-1">Ad-Hoc Practitioner Name</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. Guest Student" 
+                          value={manualPractitionerName}
+                          onChange={(e) => setManualPractitionerName(e.target.value)}
+                          required
+                          className="w-full bg-[#09090b] border border-[#27272a] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    )}
 
                     <div>
                       <label className="block text-[10px] font-mono uppercase text-[#a1a1aa] font-bold mb-1">Associated Workout Exercise</label>
@@ -1916,8 +1866,9 @@ export default function App() {
                               exerciseIndex: idx,
                               duration: String(chosen.duration),
                               calories: String(chosen.calories),
-                              notes: `Successfully locked down: ${chosen.title} course steps.`
+                              notes: `Class performance: Core power aligned. Smooth execution of ${chosen.title}.`
                             }));
+                            setAchievedUnitsQty(String(chosen.targetValue || chosen.duration || 15));
                           } else {
                             setSimFormData(prev => ({ ...prev, exerciseIndex: idx }));
                           }
@@ -1926,10 +1877,47 @@ export default function App() {
                       >
                         {exercises.map((ex, i) => (
                           <option key={ex.id} value={i} className="bg-[#18181b]">
-                            {ex.title} ({getCategoryName(ex.category)})
+                            {ex.title} (Goal: {ex.targetValue || ex.duration} {ex.targetUnit || 'minutes'})
                           </option>
                         ))}
                       </select>
+                    </div>
+
+                    {/* Dynamic Achieved Target Unit Input row */}
+                    {(() => {
+                      const chosen = exercises[Number(simFormData.exerciseIndex) % exercises.length];
+                      const activeUnit = chosen?.targetUnit || 'minutes';
+                      return (
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase text-emerald-400 font-extrabold mb-1">
+                            Completed Quantity ({activeUnit.toUpperCase()})
+                          </label>
+                          <div className="relative">
+                            <input 
+                              type="number" 
+                              placeholder={`e.g. ${chosen?.targetValue || 10}`}
+                              value={achievedUnitsQty}
+                              onChange={(e) => setAchievedUnitsQty(e.target.value)}
+                              className="w-full bg-[#09090b] border border-[#27272a] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+                            />
+                            <span className="absolute right-3 top-2 text-[10px] font-mono text-[#a1a1aa] uppercase font-bold">
+                              {activeUnit}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* DateTime Picker */}
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase text-[#a1a1aa] font-bold mb-1">Session Date & Time</label>
+                      <input 
+                        type="datetime-local" 
+                        value={sessionDateTime}
+                        onChange={(e) => setSessionDateTime(e.target.value)}
+                        required
+                        className="w-full bg-[#09090b] border border-[#27272a] text-xs text-[#fafafa] rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 font-mono cursor-pointer"
+                      />
                     </div>
 
                     <div>
@@ -1966,7 +1954,7 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-mono uppercase text-[#a1a1aa] font-bold mb-1">User Personal Note / Feeling</label>
+                      <label className="block text-[10px] font-mono uppercase text-[#a1a1aa] font-bold mb-1">Trainer Remarks & Assessment</label>
                       <textarea 
                         value={simFormData.notes}
                         onChange={(e) => setSimFormData(prev => ({ ...prev, notes: e.target.value }))}
@@ -1984,44 +1972,44 @@ export default function App() {
                       {simulating ? (
                         <>
                           <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>Pushing restful JSON body...</span>
+                          <span>Pushing to local databases...</span>
                         </>
                       ) : (
                         <>
                           <Check className="w-3.5 h-3.5" />
-                          <span>Transmit REST Callback payload</span>
+                          <span>Log Administrative Training Session</span>
                         </>
                       )}
                     </button>
                     
                     {simSuccess && (
-                      <div className="bg-emerald-950/40 border border-emerald-500/20 text-emerald-400 rounded-xl p-3 text-center text-xs animate-fadeIn font-bold">
-                        ✓ API Transaction registered securely! Graph updated.
+                      <div className="bg-emerald-950/40 border border-emerald-500/20 text-emerald-400 rounded-xl p-3 text-center text-xs animate-fadeIn font-bold font-sans">
+                        ✓ Training transaction registered securely! Log update processed.
                       </div>
                     )}
                   </form>
                 </div>
 
                 {/* Right side: Interactive activity log output list  */}
-                <div className="bg-[#18181b] border border-[#27272a] rounded-2xl p-6 lg:col-span-2 flex flex-col justify-between" id="activity-logs-dashboard">
+                <div className="bg-[#18181b] border border-[#27272a] rounded-2xl p-6 lg:col-span-2 flex flex-col justify-between animate-fadeIn" id="activity-logs-dashboard">
                   <div className="space-y-1 mb-5">
                     <h4 className="text-base font-bold text-white">Live Activity Logs Monitor ({activities.length})</h4>
-                    <p className="text-xs text-[#a1a1aa]">This is the core state store updated live by client sports integrations.</p>
+                    <p className="text-xs text-[#a1a1aa]">This is the core state store updated live by client sports integrations and trainers.</p>
                   </div>
 
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left">
+                    <table className="w-full text-left font-sans">
                       <thead>
                         <tr className="text-[10px] uppercase text-[#a1a1aa] font-bold tracking-wider border-b border-[#27272a] bg-zinc-950/20">
                           <th className="px-4 py-3">Member Details</th>
                           <th className="px-4 py-3">Training Course Completed</th>
-                          <th className="px-4 py-3 text-center">Calories & Heart Rate</th>
+                          <th className="px-4 py-3 text-center">Exercise Metric Performance</th>
                           <th className="px-4 py-3 text-right">Handshake Date</th>
                         </tr>
                       </thead>
                       <tbody className="text-xs divide-y divide-[#27272a]/30">
                         {activities.map((act) => (
-                          <tr key={act.id} className="hover:bg-zinc-800/10 font-medium">
+                          <tr key={act.id} className="hover:bg-zinc-800/10 font-medium font-sans">
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2.5">
                                 {act.userAvatar ? (
@@ -2029,6 +2017,7 @@ export default function App() {
                                     src={act.userAvatar}
                                     alt={act.userName}
                                     className="w-8 h-8 rounded-full border border-[#27272a] object-cover"
+                                    referrerPolicy="no-referrer"
                                   />
                                 ) : (
                                   <div className="w-8 h-8 rounded-full bg-neutral-800 text-white font-semibold text-[10px] border border-zinc-700 select-none flex items-center justify-center shrink-0">
@@ -2048,10 +2037,12 @@ export default function App() {
                               )}
                             </td>
                             <td className="px-4 py-3 text-center whitespace-nowrap">
-                              <div className="text-white font-mono font-bold">{act.caloriesBurned} kcal</div>
-                              <div className="text-[10px] text-[#a1a1aa] font-mono mt-0.5">{act.duration} active mins</div>
+                              <div className="text-emerald-400 font-mono font-black text-xs">
+                                {act.achievedValue !== undefined ? `${act.achievedValue} ${act.achievedUnit || 'minutes'}` : `${act.duration} active mins`}
+                              </div>
+                              <div className="text-[10px] text-zinc-400 font-mono mt-0.5">{act.caloriesBurned} kcal{Number(act.duration) > 0 ? ` • ${act.duration} mins` : ''}</div>
                               {act.heartRateAvg && (
-                                <span className="inline-block px-1.5 py-0.5 bg-red-950/20 text-red-400 rounded text-[9px] font-mono font-bold mt-1">
+                                <span className="inline-block px-1.5 py-0.5 bg-red-950/20 text-red-500 rounded text-[9px] font-mono font-bold mt-1 border border-red-500/10">
                                   ♥ {act.heartRateAvg} BPM
                                 </span>
                               )}
@@ -2725,12 +2716,12 @@ export default function App() {
                 ></textarea>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-[10px] font-mono uppercase text-[#a1a1aa] font-bold mb-1">{language === 'EN' ? 'Belt Level' : 'Tingkatan Sabuk'}</label>
                   <select 
                     value={formData.difficulty}
-                    onChange={(e) => setFormData(p => ({ ...p, difficulty: e.target.value as any }))}
+                    onChange={(e) => setFormData(p => ({ ...p, difficulty: Number(e.target.value) }))}
                     className="w-full bg-[#09090b] border border-[#27272a] rounded-xl px-3 py-2 text-white text-xs cursor-pointer focus:border-orange-500/50 focus:outline-none"
                   >
                     {beltLevels.map(belt => (
@@ -2741,16 +2732,45 @@ export default function App() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-mono uppercase text-[#a1a1aa] font-bold mb-1">Duration (Min)</label>
+                  <label className="block text-[10px] font-mono uppercase text-[#a1a1aa] font-bold mb-1">Target Unit</label>
+                  <select 
+                    value={formData.targetUnit || 'minutes'}
+                    onChange={(e) => {
+                      const nu = e.target.value as any;
+                      setFormData(p => ({ 
+                        ...p, 
+                        targetUnit: nu,
+                        targetValue: nu !== 'minutes' ? (p.targetValue || 10) : (p.duration || 15)
+                      }));
+                    }}
+                    className="w-full bg-[#09090b] border border-[#27272a] rounded-xl px-3 py-2 text-white text-xs cursor-pointer focus:border-emerald-500/50 focus:outline-none"
+                  >
+                    <option value="minutes">⏱️ Minutes</option>
+                    <option value="reps">🔁 Reps (Repetitions)</option>
+                    <option value="steps">🚶 Steps (Walking)</option>
+                    <option value="series">🧩 Series (Forms/Jurus)</option>
+                    <option value="cycles">🔄 Cycles (Breaths)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-[#a1a1aa] font-bold mb-1">
+                    {(formData.targetUnit || 'minutes') === 'minutes' ? 'Target mins' : `Target ${formData.targetUnit}`}
+                  </label>
                   <input 
                     type="number" 
-                    value={formData.duration}
-                    onChange={(e) => setFormData(p => ({ ...p, duration: Number(e.target.value) }))}
-                    className="w-full bg-[#09090b] border border-[#27272a] rounded-xl px-3 py-1.5 text-white text-center font-mono"
+                    value={formData.targetValue !== undefined ? formData.targetValue : (formData.duration || 15)}
+                    onChange={(e) => {
+                      const val = Math.max(1, Number(e.target.value));
+                      setFormData(p => ({
+                        ...p,
+                        targetValue: val
+                      }));
+                    }}
+                    className="w-full bg-[#09090b] border border-[#27272a] rounded-xl px-3 py-1.5 text-white text-center font-mono focus:border-emerald-500/50 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-mono uppercase text-[#a1a1aa] font-bold mb-1">Calories (Estimated)</label>
+                  <label className="block text-[10px] font-mono uppercase text-[#a1a1aa] font-bold mb-1">Calories (Est)</label>
                   <input 
                     type="number" 
                     value={formData.calories}
@@ -2788,11 +2808,16 @@ export default function App() {
                   <label className="block text-[10px] font-mono uppercase text-[#a1a1aa] font-bold mb-1">Overall Exercise Cycles (Loops)</label>
                   <input 
                     type="number" 
-                    value={formData.loops !== undefined ? formData.loops : 5}
-                    onChange={(e) => setFormData(p => ({ ...p, loops: Math.max(1, Number(e.target.value) || 5) }))}
+                    min="0"
+                    placeholder="0 or 1 for uncoded/single playthrough"
+                    value={formData.loops !== undefined ? formData.loops : 0}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setFormData(p => ({ ...p, loops: isNaN(val) ? 0 : Math.max(0, val) }));
+                    }}
                     className="w-full bg-[#09090b] border border-[#27272a] rounded-xl px-3 py-1.5 text-white text-center font-mono font-bold max-w-[200px]"
                   />
-                  <p className="text-[9px] text-[#a1a1aa] mt-1">Default repeat loop iterations for cyclical components.</p>
+                  <p className="text-[9px] text-[#a1a1aa] mt-1">Default repeat loop iterations. Use <code className="text-purple-400">0</code> or <code className="text-purple-400">1</code> for single walk, jog, or stretch (Non-cycles).</p>
                 </div>
               </div>
 

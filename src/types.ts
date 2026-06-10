@@ -53,6 +53,8 @@ export interface Exercise {
   targetMuscles: string[];
   katedaSpecific?: boolean; // Whether it is an official Kateda martial art / central power breathing technique
   updatedAt?: string;
+  targetUnit?: 'minutes' | 'reps' | 'steps' | 'series' | 'cycles'; // overall execution unit for the movement
+  targetValue?: number; // target quantity matching targetUnit
 
   // Real Database Bilingual fields to support live PostgreSQL schema mapping
   titleEN?: string;
@@ -89,6 +91,8 @@ export interface Activity {
   status: 'completed' | 'paused' | 'active';
   heartRateAvg?: number;
   notes?: string;
+  achievedUnit?: string;
+  achievedValue?: number;
 }
 
 export interface KeepFitStats {

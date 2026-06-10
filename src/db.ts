@@ -379,7 +379,9 @@ export async function getExercises(): Promise<Exercise[]> {
       title: row.titleEN || row.titleID || '',
       description: row.descriptionEN || row.descriptionID || '',
       steps: row.stepsEN || row.stepsID || [],
-      stepDetails: row.stepDetailsEN || row.stepDetailsID || []
+      stepDetails: row.stepDetailsEN || row.stepDetailsID || [],
+      targetUnit: row.targetUnit || 'minutes',
+      targetValue: row.targetValue !== undefined ? Number(row.targetValue) : (row.duration || 15)
     })) as Exercise[];
   }
   return readLocalStorageDb().exercises;
@@ -439,7 +441,9 @@ export async function saveExercises(exercises: Exercise[]): Promise<void> {
           lungWaveD: ex.lungWaveD !== undefined ? ex.lungWaveD : true,
           targetMuscles: ex.targetMuscles || [],
           katedaSpecific: ex.katedaSpecific || false,
-          updatedAt: ex.updatedAt || new Date().toISOString()
+          updatedAt: ex.updatedAt || new Date().toISOString(),
+          targetUnit: ex.targetUnit || 'minutes',
+          targetValue: ex.targetValue !== undefined ? Number(ex.targetValue) : (Number(ex.duration) || 15)
         };
       });
 
@@ -518,7 +522,9 @@ export async function getActivities(): Promise<Activity[]> {
         caloriesBurned: Number(row.caloriesBurned !== undefined ? row.caloriesBurned : (row.caloriesburned !== undefined ? row.caloriesburned : 0)) || 0,
         status: row.status || 'completed',
         heartRateAvg: row.heartRateAvg !== undefined ? Number(row.heartRateAvg) : (row.heartrateavg !== undefined ? Number(row.heartrateavg) : undefined),
-        notes: row.notes || ''
+        notes: row.notes || '',
+        achievedUnit: row.achievedUnit || row.achievedunit || '',
+        achievedValue: row.achievedValue !== undefined ? Number(row.achievedValue) : (row.achievedvalue !== undefined ? Number(row.achievedvalue) : undefined)
       };
     }) as Activity[];
   }
@@ -537,7 +543,9 @@ export async function addActivity(activity: Activity): Promise<void> {
       caloriesBurned: Number(activity.caloriesBurned) || 0,
       status: activity.status,
       heartRateAvg: activity.heartRateAvg !== undefined ? Number(activity.heartRateAvg) : null,
-      notes: activity.notes || ''
+      notes: activity.notes || '',
+      achievedUnit: activity.achievedUnit || null,
+      achievedValue: activity.achievedValue !== undefined ? Number(activity.achievedValue) : null
     };
 
     const { error } = await supabase.from('activities').insert([mappedToDb]);
