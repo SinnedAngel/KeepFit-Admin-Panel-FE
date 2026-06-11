@@ -263,7 +263,7 @@ export default function App() {
 
   // Status/Error logs
   const [sysLogs, setSysLogs] = useState<{ time: string; msg: string; type: 'info' | 'success' | 'warn' | 'api' }[]>([
-    { time: '11:33:20', msg: 'System online. Browser client-side LocalStorage DB connected.', type: 'info' },
+    { time: '11:33:20', msg: 'System online. Strictly using Supabase cloud DB connection.', type: 'info' },
     { time: '11:33:21', msg: 'Admin Panel loaded in Elegant Dark style guide rules. Direct Supabase sync ready.', type: 'success' }
   ]);
 
