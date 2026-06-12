@@ -1186,7 +1186,7 @@ export default function App() {
           <div className="flex items-center gap-3 p-2.5 rounded-xl bg-[#18181b] border border-[#27272a]/40" id="profile-card">
             <div className="w-8 h-8 rounded-lg bg-emerald-990/60 border border-emerald-500/20 flex items-center justify-center text-emerald-300 text-xs font-bold italic">JD</div>
             <div className="flex-1 overflow-hidden">
-              <p className="text-xs font-semibold text-white truncate">Jordan Miller</p>
+              <p className="text-xs font-semibold text-white truncate">Arman Hendra</p>
               <p className="text-[10px] text-[#a1a1aa] truncate">System Administrator</p>
             </div>
           </div>
