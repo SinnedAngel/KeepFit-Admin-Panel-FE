@@ -227,8 +227,8 @@ export async function saveBeltLevels(belts: BeltLevelInfo[]): Promise<void> {
   if (belts.length > 0) {
     const cleanedBelts = belts.map(b => ({
       id: Number(b.id),
-      nameEN: b.nameEN,
-      nameID: b.nameID,
+      "nameEN": b.nameEN,
+      "nameID": b.nameID,
       color: b.color || 'bg-white/10 text-white border-white/20'
     }));
     await supabase.from('belt_levels').upsert(cleanedBelts);
@@ -236,33 +236,56 @@ export async function saveBeltLevels(belts: BeltLevelInfo[]): Promise<void> {
 }
 
 function mapExerciseRow(row: any): Exercise {
-  const steps = row.stepsEN || row.stepsID || row.steps || [];
-  const stepDetails = row.stepDetailsEN || row.stepDetailsID || row.stepDetails || [];
+  const stepsEN = row.stepsEN || row.steps_en || row.stepsen || [];
+  const stepsID = row.stepsID || row.steps_id || row.stepsid || [];
+  const steps = stepsEN.length > 0 ? stepsEN : (stepsID.length > 0 ? stepsID : (row.steps || []));
   
-  const slidesFromField = (row.slidesUrl || row.mediaSlides || []).filter(Boolean);
+  const stepDetailsEN = row.stepDetailsEN || row.step_details_en || row.stepdetailsen || [];
+  const stepDetailsID = row.stepDetailsID || row.step_details_id || row.stepdetailsid || [];
+  const stepDetails = stepDetailsEN.length > 0 ? stepDetailsEN : (stepDetailsID.length > 0 ? stepDetailsID : (row.stepDetails || row.step_details || row.stepdetails || []));
   
-  const isVideoUrlActualVideo = row.videoUrl && (
-    row.videoUrl.includes('youtube.com') ||
-    row.videoUrl.includes('youtu.be') ||
-    row.videoUrl.endsWith('.mp4') ||
-    row.videoUrl.includes('.mp4?')
+  const slidesFromField = (row.slidesUrl || row.slides_url || row.slidesurl || row.mediaSlides || row.media_slides || row.mediaslides || []).filter(Boolean);
+  
+  const rawVideoUrl = row.videoUrl || row.video_url || row.videourl || '';
+  const rawMediaUrl = row.mediaUrl || row.media_url || row.mediaurl || '';
+
+  const isVideoUrlActualVideo = rawVideoUrl && (
+    rawVideoUrl.includes('youtube.com') ||
+    rawVideoUrl.includes('youtu.be') ||
+    rawVideoUrl.endsWith('.mp4') ||
+    rawVideoUrl.includes('.mp4?')
   );
   
-  const videoUrlVal = isVideoUrlActualVideo ? row.videoUrl : '';
-  const coverUrlVal = !isVideoUrlActualVideo ? (row.videoUrl || row.mediaUrl || '') : (row.mediaUrl || '');
+  const videoUrlVal = isVideoUrlActualVideo ? rawVideoUrl : '';
+  const coverUrlVal = !isVideoUrlActualVideo ? (rawVideoUrl || rawMediaUrl || '') : (rawMediaUrl || '');
+
+  const titleEN = row.titleEN || row.title_en || row.titleen || '';
+  const titleID = row.titleID || row.title_id || row.titleid || '';
+  const descEN = row.descriptionEN || row.description_en || row.descriptionen || '';
+  const descID = row.descriptionID || row.description_id || row.descriptionid || '';
+
+  const targetUnit = row.targetUnit || row.target_unit || row.targetunit || 'minutes';
+  const targetValue = row.targetValue !== undefined ? Number(row.targetValue) : (row.target_value !== undefined ? Number(row.target_value) : (row.targetvalue !== undefined ? Number(row.targetvalue) : (row.duration || Number(row.duration) || 15)));
 
   return {
     ...row,
-    title: row.titleEN || row.titleID || row.title || '',
-    description: row.descriptionEN || row.descriptionID || row.description || '',
+    titleEN,
+    titleID,
+    descriptionEN: descEN,
+    descriptionID: descID,
+    title: titleEN || titleID || row.title || '',
+    description: descEN || descID || row.description || '',
     steps: steps,
     stepDetails: stepDetails,
-    targetUnit: row.targetUnit || 'minutes',
-    targetValue: row.targetValue !== undefined ? Number(row.targetValue) : (row.duration || 15),
+    targetUnit: targetUnit,
+    targetValue: targetValue,
     videoUrl: videoUrlVal,
     slidesUrl: slidesFromField,
     mediaUrl: videoUrlVal || coverUrlVal || (slidesFromField.length > 0 ? slidesFromField[0] : ''),
-    mediaSlides: slidesFromField
+    mediaSlides: slidesFromField,
+    loops: Number(row.loops) || 1,
+    targetMuscles: row.targetMuscles || row.target_muscles || row.targetmuscles || [],
+    katedaSpecific: row.katedaSpecific || row.kateda_specific || row.katedaspecific || false
   } as Exercise;
 }
 
@@ -305,44 +328,44 @@ export async function saveExercises(exercises: Exercise[]): Promise<void> {
   }
 
   if (exercises.length > 0) {
-    const cleanedExercises = exercises.map(ex => {
+    const exactPayloads = exercises.map(ex => {
       const titleEN = ex.titleEN || ex.title || '';
       const titleID = ex.titleID || ex.title || '';
       const descEN = ex.descriptionEN || ex.description || '';
       const descID = ex.descriptionID || ex.description || '';
-      const stepsEN = ex.stepsEN || ex.steps || [];
-      const stepsID = ex.stepsID || ex.steps || [];
-      const detailsEN = ex.stepDetailsEN || ex.stepDetails || generateFallbackStepDetails(ex);
-      const detailsID = ex.stepDetailsID || ex.stepDetails || generateFallbackStepDetails(ex);
+      const stepsEN = ex.stepsEN && ex.stepsEN.length > 0 ? ex.stepsEN : (ex.steps || []);
+      const stepsID = ex.stepsID && ex.stepsID.length > 0 ? ex.stepsID : (ex.steps || []);
+      const detailsEN = ex.stepDetailsEN && ex.stepDetailsEN.length > 0 ? ex.stepDetailsEN : (ex.stepDetails || generateFallbackStepDetails(ex));
+      const detailsID = ex.stepDetailsID && ex.stepDetailsID.length > 0 ? ex.stepDetailsID : (ex.stepDetails || generateFallbackStepDetails(ex));
 
       return {
         id: ex.id,
-        titleEN: titleEN,
-        titleID: titleID,
-        category: ex.category,
-        difficulty: ex.difficulty,
+        "titleEN": titleEN,
+        "titleID": titleID,
+        category: ex.category || null,
+        difficulty: ex.difficulty || null,
         duration: Number(ex.duration) || 0,
         calories: Number(ex.calories) || 0,
-        descriptionEN: descEN,
-        descriptionID: descID,
-        stepsEN: stepsEN,
-        stepsID: stepsID,
-        stepDetailsEN: detailsEN,
-        stepDetailsID: detailsID,
-        videoUrl: ex.videoUrl || ex.mediaUrl || '',
-        slidesUrl: ex.slidesUrl || ex.mediaSlides || [],
+        "descriptionEN": descEN,
+        "descriptionID": descID,
+        "stepsEN": stepsEN,
+        "stepsID": stepsID,
+        "stepDetailsEN": detailsEN,
+        "stepDetailsID": detailsID,
+        "videoUrl": ex.videoUrl || ex.mediaUrl || null,
+        "slidesUrl": ex.slidesUrl || ex.mediaSlides || [],
         loops: Number(ex.loops) || 1,
-        targetMuscles: ex.targetMuscles || [],
-        katedaSpecific: ex.katedaSpecific || false,
-        updatedAt: ex.updatedAt || new Date().toISOString(),
-        targetUnit: ex.targetUnit || 'minutes',
-        targetValue: ex.targetValue !== undefined ? Number(ex.targetValue) : (Number(ex.duration) || 15)
+        "targetMuscles": ex.targetMuscles || [],
+        "katedaSpecific": ex.katedaSpecific || false,
+        "updatedAt": ex.updatedAt || new Date().toISOString(),
+        "targetUnit": ex.targetUnit || 'minutes',
+        "targetValue": ex.targetValue !== undefined ? Number(ex.targetValue) : (Number(ex.duration) || 15)
       };
     });
 
-    const { error: upsertErr } = await supabase.from('exercises').upsert(cleanedExercises);
+    const { error: upsertErr } = await supabase.from('exercises').upsert(exactPayloads);
     if (upsertErr) {
-      throw new Error(`Supabase upsert exercises failed: ${upsertErr.message}`);
+      throw new Error(`Supabase upsert exercises failed: ${upsertErr.message}\nPayload attempt: ${JSON.stringify(exactPayloads[0])}`);
     }
   }
 }
@@ -409,23 +432,22 @@ export async function addActivity(activity: Activity): Promise<void> {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error('Supabase client not initialized');
 
-  const mappedToDb = {
+  const exactPayload = {
     id: activity.id,
-    userId: activity.userId,
-    exerciseId: activity.exerciseId,
+    "userId": activity.userId,
+    "exerciseId": activity.exerciseId,
     timestamp: activity.timestamp,
     duration: Number(activity.duration) || 0,
-    caloriesBurned: Number(activity.caloriesBurned) || 0,
+    "caloriesBurned": Number(activity.caloriesBurned) || 0,
     status: activity.status,
-    heartRateAvg: activity.heartRateAvg !== undefined ? Number(activity.heartRateAvg) : null,
-    notes: activity.notes || '',
-    achievedUnit: activity.achievedUnit || null,
-    achievedValue: activity.achievedValue !== undefined ? Number(activity.achievedValue) : null
+    "heartRateAvg": activity.heartRateAvg !== undefined ? Number(activity.heartRateAvg) : null,
+    notes: activity.notes || ''
   };
 
-  const { error } = await supabase.from('activities').insert([mappedToDb]);
-  if (error) {
-    throw new Error(`Supabase insert activity failed: ${error.message}`);
+  let res = await supabase.from('activities').insert([exactPayload]);
+  
+  if (res.error) {
+    throw new Error(`Supabase insert activity failed: ${res.error.message}\nPayload attempt: ${JSON.stringify(exactPayload)}`);
   }
 }
 
